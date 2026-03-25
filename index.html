@@ -546,20 +546,12 @@ td.wrap { white-space: normal; max-width: 300px; }
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
     </svg>
     <h2>Datenkatalog laden</h2>
-    <p id="uploadDesc">Verbinde den lokal synchronisierten SharePoint-Ordner — danach laedt es automatisch.</p>
+    <p>Synchronisierten Ordner verbinden oder Excel-Datei hochladen.</p>
     <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none">
 
-    <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-bottom:12px;">
-      <button class="upload-btn" onclick="msLogin()" id="btnMsLogin">
-        <span style="display:inline-flex;align-items:center;gap:6px;">
-          <svg width="16" height="16" viewBox="0 0 21 21"><rect width="10" height="10" fill="#f25022"/><rect x="11" width="10" height="10" fill="#7fba00"/><rect y="11" width="10" height="10" fill="#00a4ef"/><rect x="11" y="11" width="10" height="10" fill="#ffb900"/></svg>
-          Mit Microsoft anmelden
-        </span>
-      </button>
-    </div>
-    <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-bottom:8px;">
-      <button class="upload-btn" style="background:var(--bg-tertiary);border:1px solid var(--border);font-size:12px;padding:7px 16px;" onclick="pickFolder()">Lokalen Ordner verbinden</button>
-      <button class="upload-btn" style="background:var(--bg-tertiary);border:1px solid var(--border);font-size:12px;padding:7px 16px;" onclick="document.getElementById('fileInput').click()">Datei waehlen</button>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-bottom:10px;">
+      <button class="upload-btn" onclick="pickFolder()">Ordner verbinden</button>
+      <button class="upload-btn" style="background:var(--bg-tertiary);border:1px solid var(--border);" onclick="document.getElementById('fileInput').click()">Datei waehlen</button>
     </div>
     <div style="color:var(--text-secondary);font-size:11px;margin-bottom:8px;">oder Excel-Datei hierher ziehen</div>
     <div id="uploadStatus" class="upload-status"></div>
@@ -695,8 +687,6 @@ td.wrap { white-space: normal; max-width: 300px; }
 
 <!-- SheetJS for client-side Excel parsing -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-<!-- MSAL.js for Microsoft login -->
-<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
 <script>
 "use strict";
 
@@ -805,134 +795,6 @@ const CACHE_TS_KEY = 'datenkatalog_ts';
 const DB_NAME = 'DatenkatalogViewer';
 const DB_STORE = 'handles';
 
-// ============================================================
-//  Microsoft Graph API Configuration
-// ============================================================
-// SharePoint file path in Graph API format
-const GRAPH_SITE = 'buildagil.sharepoint.com:/teams/184509:';
-const GRAPH_FILE_PATH = '/30.3_DP/Projektierung/01_BIM/13_Datenkatalog/Datenkatalog_ASTRA.xlsx';
-
-// MSAL Configuration
-// To set up: Azure Portal > App registrations > New registration
-//   - Name: "Datenkatalog Viewer"
-//   - Supported account types: "Accounts in this organizational directory only"
-//   - Redirect URI: "Single-page application" > https://miobuser.github.io/Datenkatalog-Viewer/
-//   - API permissions: Microsoft Graph > Delegated > Files.Read.All, Sites.Read.All
-const MSAL_CONFIG = {
-  auth: {
-    clientId: '', // <-- Azure AD App Client ID hier eintragen
-    authority: 'https://login.microsoftonline.com/common',
-    redirectUri: location.origin + location.pathname,
-  },
-  cache: {
-    cacheLocation: 'localStorage',
-  }
-};
-
-let msalInstance = null;
-
-function initMsal() {
-  if (msalInstance) return msalInstance;
-  if (!MSAL_CONFIG.auth.clientId) return null;
-  try {
-    msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
-    return msalInstance;
-  } catch(e) {
-    console.error('MSAL init failed:', e);
-    return null;
-  }
-}
-
-async function msLogin() {
-  const client = initMsal();
-  if (!client) {
-    setStatus('Azure AD Client ID nicht konfiguriert. Siehe Setup-Anleitung.', true);
-    return;
-  }
-
-  try {
-    setStatus('Microsoft-Login...');
-
-    // Try silent first (cached token)
-    let tokenResponse = null;
-    const accounts = client.getAllAccounts();
-    if (accounts.length > 0) {
-      try {
-        tokenResponse = await client.acquireTokenSilent({
-          scopes: ['Files.Read.All', 'Sites.Read.All'],
-          account: accounts[0]
-        });
-      } catch(e) { /* silent failed, will do popup */ }
-    }
-
-    // Popup login
-    if (!tokenResponse) {
-      tokenResponse = await client.loginPopup({
-        scopes: ['Files.Read.All', 'Sites.Read.All']
-      });
-    }
-
-    if (!tokenResponse || !tokenResponse.accessToken) {
-      // After loginPopup, need to acquire token separately
-      const acct = client.getAllAccounts()[0];
-      if (!acct) throw new Error('Kein Account nach Login');
-      tokenResponse = await client.acquireTokenSilent({
-        scopes: ['Files.Read.All', 'Sites.Read.All'],
-        account: acct
-      });
-    }
-
-    setStatus('Lade Datei von SharePoint...');
-    await fetchFromGraph(tokenResponse.accessToken);
-
-  } catch(err) {
-    if (err.name === 'BrowserAuthError' && err.errorCode === 'user_cancelled') {
-      setStatus('Login abgebrochen.');
-      return;
-    }
-    setStatus('Login-Fehler: ' + (err.message || err), true);
-    console.error(err);
-  }
-}
-
-async function fetchFromGraph(token) {
-  const url = 'https://graph.microsoft.com/v1.0/sites/' + GRAPH_SITE +
-    '/drive/root:' + GRAPH_FILE_PATH + ':/content';
-
-  const resp = await fetch(url, {
-    headers: { 'Authorization': 'Bearer ' + token }
-  });
-
-  if (!resp.ok) {
-    const txt = await resp.text().catch(() => '');
-    throw new Error('SharePoint: ' + resp.status + ' ' + txt.substring(0, 100));
-  }
-
-  const buf = await resp.arrayBuffer();
-  const data = parseExcel(buf);
-  saveToCache(data);
-  initViewer(data, 'SharePoint (Online)');
-}
-
-// Silent token refresh for "Aktualisieren" button
-async function msRefresh() {
-  const client = initMsal();
-  if (!client) return false;
-  const accounts = client.getAllAccounts();
-  if (accounts.length === 0) return false;
-
-  try {
-    const tokenResponse = await client.acquireTokenSilent({
-      scopes: ['Files.Read.All', 'Sites.Read.All'],
-      account: accounts[0]
-    });
-    await fetchFromGraph(tokenResponse.accessToken);
-    return true;
-  } catch(e) {
-    console.log('Silent refresh failed:', e.message);
-    return false;
-  }
-}
 
 function setStatus(msg, isError) {
   const el = document.getElementById('uploadStatus');
@@ -1031,10 +893,7 @@ async function pickFolder() {
 
 // --- Reload from best available source ---
 async function reloadFromSource() {
-  // 1. Try Graph API (silent token refresh)
-  if (await msRefresh()) return;
-
-  // 2. Try stored directory handle
+  // 1. Try stored directory handle
   try {
     const dirHandle = await loadDirHandle();
     if (dirHandle) {
@@ -1055,18 +914,6 @@ async function reloadFromSource() {
   clearAndReload();
 }
 
-// --- Try fetching via HTTP (for hosted scenarios) ---
-async function tryFetch(url) {
-  try {
-    const resp = await fetch(url, { credentials: 'include' });
-    if (!resp.ok) return null;
-    const ct = resp.headers.get('content-type') || '';
-    if (ct.includes('text/html')) return null;
-    const buf = await resp.arrayBuffer();
-    return buf.byteLength > 5000 ? buf : null;
-  } catch(e) { return null; }
-}
-
 // --- Main startup ---
 async function autoLoad() {
   // 1. Cache (instant)
@@ -1076,7 +923,7 @@ async function autoLoad() {
   try {
     const dirHandle = await loadDirHandle();
     if (dirHandle) {
-      setStatus('Lese aus gespeichertem Ordner...');
+      setStatus('Lese aus verbundenem Ordner...');
       const perm = await dirHandle.queryPermission({ mode: 'read' });
       if (perm === 'granted') {
         const buf = await readExcelFromDir(dirHandle);
@@ -1087,31 +934,13 @@ async function autoLoad() {
           return;
         }
       } else {
-        // Need user gesture to request permission - show hint
-        setStatus('Ordner war verbunden. Klicke "Ordner verbinden" um Zugriff zu erneuern.');
+        setStatus('Ordner war verbunden — klicke "Ordner verbinden" um Zugriff zu erneuern.');
         return;
       }
     }
   } catch(e) { console.log('Dir handle check:', e.message); }
 
-  // 3. Try Graph API silent (if user logged in before)
-  if (await msRefresh()) return;
-
-  // 4. Try relative fetch (for hosted scenarios)
-  if (location.protocol !== 'file:') {
-    setStatus('Versuche automatisches Laden...');
-    const buf = await tryFetch('./' + EXCEL_FILENAME);
-    if (buf) {
-      try {
-        const data = parseExcel(buf);
-        saveToCache(data);
-        initViewer(data, 'Auto-fetch');
-        return;
-      } catch(e) { console.error(e); }
-    }
-  }
-
-  // 5. Fallback: show upload screen
+  // 3. Fallback: show upload screen
   setStatus('');
 }
 

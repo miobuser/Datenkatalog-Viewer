@@ -319,7 +319,7 @@ td.wrap { white-space: normal; max-width: 300px; }
 .matrix-table .sticky-col {
   position: sticky;
   left: 0;
-  z-index: 1;
+  z-index: 4;
   background: var(--bg-secondary);
   font-weight: 600;
   font-size: 11px;
@@ -328,9 +328,11 @@ td.wrap { white-space: normal; max-width: 300px; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  border-right: 2px solid var(--border);
+  box-shadow: 4px 0 8px rgba(0,0,0,0.4);
 }
 .matrix-table th.sticky-col {
-  z-index: 3;
+  z-index: 5;
   background: var(--bg-tertiary);
 }
 .matrix-group-row td {
@@ -400,24 +402,55 @@ td.wrap { white-space: normal; max-width: 300px; }
   overflow: hidden;
 }
 
-/* Matrix tooltip for cell details */
-.matrix-tooltip {
+/* Matrix detail panel (replaces tooltip) */
+.matrix-detail-panel {
   position: fixed;
   z-index: 100;
   background: var(--bg-secondary);
   border: 1px solid var(--accent);
   border-radius: var(--radius-lg);
-  padding: 10px 14px;
   font-size: 12px;
-  max-width: 380px;
+  width: 420px;
+  max-height: 70vh;
   box-shadow: var(--shadow-lg);
-  pointer-events: none;
+  display: flex;
+  flex-direction: column;
 }
-.matrix-tooltip .tt-title { color: var(--accent); font-weight: 600; margin-bottom: 4px; }
-.matrix-tooltip .tt-prop { color: #fff; font-weight: 600; font-size: 13px; }
-.matrix-tooltip .tt-meta { color: var(--text-secondary); margin-top: 4px; font-size: 11px; }
-.matrix-tooltip .tt-values { margin-top: 6px; }
-.matrix-tooltip .tt-values .val-chip { font-size: 10px; }
+.matrix-detail-panel .mdp-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.matrix-detail-panel .mdp-header .tt-title { color: var(--accent); font-weight: 600; margin-bottom: 2px; font-size: 11px; }
+.matrix-detail-panel .mdp-header .tt-prop { color: #fff; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.matrix-detail-panel .mdp-header .tt-meta { color: var(--text-secondary); margin-top: 3px; font-size: 11px; }
+.matrix-detail-panel .mdp-close {
+  position: absolute; top: 6px; right: 8px;
+  cursor: pointer; color: var(--text-secondary); font-size: 16px;
+  padding: 2px 6px; border-radius: var(--radius-md);
+}
+.matrix-detail-panel .mdp-close:hover { background: var(--accent); color: #fff; }
+.matrix-detail-panel .mdp-search {
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.matrix-detail-panel .mdp-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+.matrix-detail-panel .mdp-body {
+  padding: 8px 14px 12px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.matrix-detail-panel .mdp-body .values-list { gap: 3px; }
+.matrix-detail-panel .mdp-body .val-chip { font-size: 11px; }
+.matrix-detail-panel .mdp-body .val-chip.val-hidden { display: none; }
+.matrix-detail-panel .mdp-body .val-match { background: var(--accent-light); border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -992,71 +1025,113 @@ function filterMatrix() {
   h += '</tbody></table>';
   wrap.innerHTML = h;
 
-  // Store filtered elements for tooltip access
+  // Store filtered elements for detail panel access
   wrap._filtElems = filtElems;
 
-  // Click handler for cell tooltips
+  // Click handler for cell detail panel
   wrap.onclick = function(ev) {
     const td = ev.target.closest('td.cell[data-prop]');
-    if (!td) { removeTooltip(); return; }
+    if (!td) return;
     ev.stopPropagation();
-
-    const propName = td.dataset.prop;
-    const eIdx = parseInt(td.dataset.eidx);
-    const elem = wrap._filtElems[eIdx];
-    const prop = propByName[propName];
-    if (!prop || !elem) return;
-
-    const level = elem.pflicht[propName] || 0;
-
-    // Build tooltip
-    removeTooltip();
-    const tt = document.createElement('div');
-    tt.className = 'matrix-tooltip';
-    tt.id = 'matrixTooltip';
-
-    let inner = '<div class="tt-title">' + esc(elem.bauteilbezeichnung) + '</div>';
-    inner += '<div class="tt-prop">' + esc(propName) + ' ' + badge(level) + '</div>';
-    inner += '<div class="tt-meta">' + esc(prop.pset) + ' | ' + esc(prop.datentyp) + '</div>';
-    if (prop.beschreibung) inner += '<div class="tt-meta">' + esc(prop.beschreibung) + '</div>';
-
-    // Wertebereich
-    if (prop.wertebereich && prop.wertebereich !== 'None') {
-      const vals = prop.wertebereich.split(',').map(v => v.trim()).filter(Boolean);
-      if (vals.length > 1) {
-        const show = vals.slice(0, 30);
-        inner += '<div class="tt-values"><div style="color:var(--text-secondary);font-size:10px;margin-bottom:2px">ERLAUBTE WERTE (' + vals.length + '):</div>';
-        inner += '<div class="values-list">' + show.map(v => '<span class="val-chip">' + esc(v) + '</span>').join('') + '</div>';
-        if (vals.length > 30) inner += '<div style="color:var(--text-secondary);font-size:10px;margin-top:2px">... und ' + (vals.length - 30) + ' weitere</div>';
-        inner += '</div>';
-      } else {
-        inner += '<div class="tt-meta">Wertebereich: <code>' + esc(prop.wertebereich) + '</code></div>';
-      }
-    }
-
-    tt.innerHTML = inner;
-    document.body.appendChild(tt);
-
-    // Position near cell
-    const rect = td.getBoundingClientRect();
-    let left = rect.right + 8;
-    let top = rect.top;
-    if (left + 380 > window.innerWidth) left = rect.left - 388;
-    if (left < 0) left = 8;
-    if (top + tt.offsetHeight > window.innerHeight) top = window.innerHeight - tt.offsetHeight - 8;
-    tt.style.left = left + 'px';
-    tt.style.top = top + 'px';
-    tt.style.pointerEvents = 'auto';
+    showCellDetail(td, wrap._filtElems);
   };
 }
 
-function removeTooltip() {
-  const old = document.getElementById('matrixTooltip');
+function showCellDetail(td, filtElems) {
+  const propName = td.dataset.prop;
+  const eIdx = parseInt(td.dataset.eidx);
+  const elem = filtElems[eIdx];
+  const prop = propByName[propName];
+  if (!prop || !elem) return;
+
+  const level = elem.pflicht[propName] || 0;
+
+  closeCellDetail();
+  const panel = document.createElement('div');
+  panel.className = 'matrix-detail-panel';
+  panel.id = 'matrixDetailPanel';
+
+  // Header
+  let header = '<div class="mdp-header">' +
+    '<span class="mdp-close" onclick="closeCellDetail()">&times;</span>' +
+    '<div class="tt-title">' + esc(elem.bauteilbezeichnung) + '</div>' +
+    '<div class="tt-prop">' + esc(propName) + ' ' + badge(level) + '</div>' +
+    '<div class="tt-meta">' + esc(prop.pset) + ' | ' + esc(prop.datentyp) + '</div>';
+  if (prop.beschreibung) header += '<div class="tt-meta">' + esc(prop.beschreibung) + '</div>';
+  header += '</div>';
+
+  // Wertebereich
+  let searchHtml = '';
+  let bodyHtml = '';
+
+  if (prop.wertebereich && prop.wertebereich !== 'None') {
+    const vals = prop.wertebereich.split(',').map(v => v.trim()).filter(Boolean);
+    if (vals.length > 1) {
+      searchHtml = '<div class="mdp-search">' +
+        '<input type="text" placeholder="Werte durchsuchen (' + vals.length + ')..." oninput="filterDetailValues(this.value)">' +
+        '</div>';
+      bodyHtml = '<div class="mdp-body">' +
+        '<div style="color:var(--text-secondary);font-size:10px;margin-bottom:4px;text-transform:uppercase">Erlaubte Werte (' + vals.length + ')</div>' +
+        '<div class="values-list" id="mdpValuesList">' +
+        vals.map(v => '<span class="val-chip" data-val="' + esc(v).toLowerCase() + '">' + esc(v) + '</span>').join('') +
+        '</div></div>';
+    } else {
+      bodyHtml = '<div class="mdp-body">' +
+        '<div style="color:var(--text-secondary);font-size:10px;margin-bottom:4px;text-transform:uppercase">Wertebereich</div>' +
+        '<code>' + esc(prop.wertebereich) + '</code></div>';
+    }
+  } else {
+    bodyHtml = '<div class="mdp-body"><span style="color:var(--text-secondary)">Kein Wertebereich definiert (Freitext)</span></div>';
+  }
+
+  panel.innerHTML = header + searchHtml + bodyHtml;
+  document.body.appendChild(panel);
+
+  // Position near clicked cell
+  const rect = td.getBoundingClientRect();
+  let left = rect.right + 10;
+  let top = rect.top - 40;
+  // Adjust if overflowing
+  if (left + 430 > window.innerWidth) left = rect.left - 430;
+  if (left < 8) left = 8;
+  if (top < 8) top = 8;
+  panel.style.left = left + 'px';
+  panel.style.top = top + 'px';
+
+  // After positioning, check bottom overflow
+  const panelRect = panel.getBoundingClientRect();
+  if (panelRect.bottom > window.innerHeight - 8) {
+    panel.style.top = Math.max(8, window.innerHeight - panel.offsetHeight - 8) + 'px';
+  }
+
+  // Focus search if present
+  const searchInput = panel.querySelector('input');
+  if (searchInput) searchInput.focus();
+}
+
+function filterDetailValues(query) {
+  const list = document.getElementById('mdpValuesList');
+  if (!list) return;
+  const q = query.toLowerCase();
+  list.querySelectorAll('.val-chip').forEach(chip => {
+    const val = chip.dataset.val;
+    if (!q || val.includes(q)) {
+      chip.classList.remove('val-hidden');
+      chip.classList.toggle('val-match', q.length > 0);
+    } else {
+      chip.classList.add('val-hidden');
+      chip.classList.remove('val-match');
+    }
+  });
+}
+
+function closeCellDetail() {
+  const old = document.getElementById('matrixDetailPanel');
   if (old) old.remove();
 }
 document.addEventListener('click', function(ev) {
-  if (!ev.target.closest('.matrix-tooltip') && !ev.target.closest('td.cell[data-prop]')) {
-    removeTooltip();
+  if (!ev.target.closest('.matrix-detail-panel') && !ev.target.closest('td.cell[data-prop]')) {
+    closeCellDetail();
   }
 });
 

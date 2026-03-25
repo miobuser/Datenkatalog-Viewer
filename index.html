@@ -545,7 +545,7 @@ td.wrap { white-space: normal; max-width: 300px; }
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
     </svg>
     <h2>Datenkatalog laden</h2>
-    <p>Excel-Datei (.xlsx) hierher ziehen oder klicken zum Auswaehlen</p>
+    <p>Wird automatisch geladen wenn dieses HTML im selben SharePoint-Ordner liegt.<br>Sonst: Excel-Datei (.xlsx) hierher ziehen oder klicken.</p>
     <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none">
     <button class="upload-btn" onclick="document.getElementById('fileInput').click()">Datei auswaehlen</button>
     <div class="upload-link">
@@ -785,21 +785,82 @@ function parseExcel(arrayBuffer) {
 }
 
 // ============================================================
-//  Upload / Cache Logic
+//  Auto-fetch / Cache / Upload Logic
 // ============================================================
+
+// Excel filename — change this if the file is renamed
+const EXCEL_FILENAME = 'Datenkatalog_ASTRA.xlsx';
+
+// SharePoint direct download URL (used when HTML is NOT on SharePoint)
+const SHAREPOINT_URL = 'https://buildagil.sharepoint.com/teams/184509/Freigegebene Dokumente/30.3_DP/Projektierung/01_BIM/13_Datenkatalog/Datenkatalog_ASTRA.xlsx';
+
 const CACHE_KEY = 'datenkatalog_data';
 const CACHE_TS_KEY = 'datenkatalog_ts';
+
+function setStatus(msg, isError) {
+  const el = document.getElementById('uploadStatus');
+  el.className = 'upload-status' + (isError ? ' error' : '');
+  el.textContent = msg;
+}
+
+// Try fetching Excel from a URL, returns ArrayBuffer or null
+async function tryFetch(url, label) {
+  try {
+    setStatus('Lade ' + label + '...');
+    const resp = await fetch(url, { credentials: 'include' });
+    if (!resp.ok) throw new Error(resp.status);
+    const ct = resp.headers.get('content-type') || '';
+    // Verify we got a binary file, not an HTML login page
+    if (ct.includes('text/html')) throw new Error('Got HTML (login page?)');
+    const buf = await resp.arrayBuffer();
+    if (buf.byteLength < 5000) throw new Error('File too small');
+    return buf;
+  } catch(e) {
+    console.log('Fetch ' + label + ' failed:', e.message);
+    return null;
+  }
+}
+
+async function autoLoad() {
+  // 1. Try cache first (instant startup)
+  if (loadFromCache()) return;
+
+  // 2. Try relative path (works when HTML is on same SharePoint folder)
+  let buf = await tryFetch('./' + EXCEL_FILENAME, 'aus gleichem Ordner');
+
+  // 3. Try SharePoint direct URL (works if user is logged in + same domain)
+  if (!buf) {
+    buf = await tryFetch(SHAREPOINT_URL, 'von SharePoint');
+  }
+
+  // 4. Try SharePoint API download endpoint
+  if (!buf) {
+    const apiUrl = "https://buildagil.sharepoint.com/teams/184509/_api/web/GetFileByServerRelativeUrl('/teams/184509/Freigegebene%20Dokumente/30.3_DP/Projektierung/01_BIM/13_Datenkatalog/Datenkatalog_ASTRA.xlsx')/$value";
+    buf = await tryFetch(apiUrl, 'via SharePoint API');
+  }
+
+  if (buf) {
+    try {
+      const data = parseExcel(buf);
+      saveToCache(data);
+      initViewer(data);
+      return;
+    } catch(err) {
+      console.error('Parse error:', err);
+    }
+  }
+
+  // 5. Fallback: show upload screen
+  setStatus('Automatisches Laden nicht moeglich. Bitte Datei manuell laden.');
+}
 
 function loadFromCache() {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
-    const ts = localStorage.getItem(CACHE_TS_KEY);
     if (raw) {
       const data = JSON.parse(raw);
       if (data.properties && data.elements) {
         initViewer(data);
-        const date = ts ? new Date(parseInt(ts)).toLocaleDateString('de-CH') : '?';
-        document.getElementById('uploadStatus').textContent = '';
         return true;
       }
     }
@@ -811,7 +872,7 @@ function saveToCache(data) {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(data));
     localStorage.setItem(CACHE_TS_KEY, String(Date.now()));
-  } catch(e) { console.warn('Cache save failed (data too large?):', e); }
+  } catch(e) { console.warn('Cache save failed:', e); }
 }
 
 function clearAndReload() {
@@ -822,20 +883,16 @@ function clearAndReload() {
 
 function handleFile(file) {
   if (!file) return;
-  const status = document.getElementById('uploadStatus');
-  status.className = 'upload-status';
-  status.textContent = 'Wird geladen und geparsed...';
-
+  setStatus('Wird geladen und geparsed...');
   const reader = new FileReader();
   reader.onload = function(e) {
     try {
       const data = parseExcel(e.target.result);
       saveToCache(data);
       initViewer(data);
-      status.textContent = '';
+      setStatus('');
     } catch(err) {
-      status.className = 'upload-status error';
-      status.textContent = 'Fehler: ' + err.message;
+      setStatus('Fehler: ' + err.message, true);
       console.error(err);
     }
   };
@@ -1441,8 +1498,8 @@ function toggleNext(el) {
   }
 }
 
-// Try loading from cache on startup
-loadFromCache();
+// Startup: try auto-load (cache -> fetch -> fallback to upload)
+autoLoad();
 </script>
 </body>
 </html>

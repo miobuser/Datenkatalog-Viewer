@@ -535,7 +535,8 @@ td.wrap { white-space: normal; max-width: 300px; }
     <div class="app-name">Datenkatalog Viewer</div>
   </div>
   <div class="toolbar-info" id="toolbarInfo"></div>
-  <button id="reloadBtn" class="hidden" onclick="clearAndReload()" style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-secondary);padding:4px 12px;border-radius:var(--radius-md);cursor:pointer;font-size:11px;font-family:inherit;">Andere Datei laden</button>
+  <button id="reloadBtn" class="hidden" onclick="reloadFromSource()" style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-secondary);padding:4px 12px;border-radius:var(--radius-md);cursor:pointer;font-size:11px;font-family:inherit;">Aktualisieren</button>
+  <button id="resetBtn" class="hidden" onclick="clearAndReload()" style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-secondary);padding:4px 12px;border-radius:var(--radius-md);cursor:pointer;font-size:11px;font-family:inherit;">Andere Quelle</button>
 </div>
 
 <!-- ===== Upload Screen ===== -->
@@ -545,9 +546,15 @@ td.wrap { white-space: normal; max-width: 300px; }
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
     </svg>
     <h2>Datenkatalog laden</h2>
-    <p>Wird automatisch geladen wenn dieses HTML im selben SharePoint-Ordner liegt.<br>Sonst: Excel-Datei (.xlsx) hierher ziehen oder klicken.</p>
+    <p id="uploadDesc">Verbinde den lokal synchronisierten SharePoint-Ordner — danach laedt es automatisch.</p>
     <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none">
-    <button class="upload-btn" onclick="document.getElementById('fileInput').click()">Datei auswaehlen</button>
+
+    <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-bottom:8px;">
+      <button class="upload-btn" id="btnPickFolder" onclick="pickFolder()">Ordner verbinden</button>
+      <button class="upload-btn" style="background:var(--bg-tertiary);border:1px solid var(--border);" onclick="document.getElementById('fileInput').click()">Einzelne Datei waehlen</button>
+    </div>
+    <div style="color:var(--text-secondary);font-size:11px;margin-bottom:8px;">oder Excel-Datei hierher ziehen</div>
+
     <div class="upload-link">
       <a href="https://app.buildagil.com/teams/184509/Freigegebene%20Dokumente/30.3_DP/Projektierung/01_BIM/13_Datenkatalog/Datenkatalog_ASTRA.xlsx?ItemID=893&ItemVersion=9.0" target="_blank" rel="noopener">
         Datenkatalog auf buildagil oeffnen
@@ -785,17 +792,14 @@ function parseExcel(arrayBuffer) {
 }
 
 // ============================================================
-//  Auto-fetch / Cache / Upload Logic
+//  File System Access API + Cache + Fetch Logic
 // ============================================================
 
-// Excel filename — change this if the file is renamed
 const EXCEL_FILENAME = 'Datenkatalog_ASTRA.xlsx';
-
-// SharePoint direct download URL (used when HTML is NOT on SharePoint)
-const SHAREPOINT_URL = 'https://buildagil.sharepoint.com/teams/184509/Freigegebene Dokumente/30.3_DP/Projektierung/01_BIM/13_Datenkatalog/Datenkatalog_ASTRA.xlsx';
-
 const CACHE_KEY = 'datenkatalog_data';
 const CACHE_TS_KEY = 'datenkatalog_ts';
+const DB_NAME = 'DatenkatalogViewer';
+const DB_STORE = 'handles';
 
 function setStatus(msg, isError) {
   const el = document.getElementById('uploadStatus');
@@ -803,55 +807,173 @@ function setStatus(msg, isError) {
   el.textContent = msg;
 }
 
-// Try fetching Excel from a URL, returns ArrayBuffer or null
-async function tryFetch(url, label) {
+// --- IndexedDB for storing directory handle ---
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(DB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveDirHandle(handle) {
+  const db = await openDB();
+  const tx = db.transaction(DB_STORE, 'readwrite');
+  tx.objectStore(DB_STORE).put(handle, 'dirHandle');
+  return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+}
+
+async function loadDirHandle() {
+  const db = await openDB();
+  const tx = db.transaction(DB_STORE, 'readonly');
+  const req = tx.objectStore(DB_STORE).get('dirHandle');
+  return new Promise((res) => { req.onsuccess = () => res(req.result || null); req.onerror = () => res(null); });
+}
+
+async function clearDirHandle() {
+  const db = await openDB();
+  const tx = db.transaction(DB_STORE, 'readwrite');
+  tx.objectStore(DB_STORE).delete('dirHandle');
+}
+
+// --- Read Excel from a directory handle ---
+async function readExcelFromDir(dirHandle) {
+  // Search for the Excel file in this directory (and one level deep)
+  const names = [EXCEL_FILENAME, EXCEL_FILENAME.toLowerCase()];
+
+  // Try direct
+  for (const name of names) {
+    try {
+      const fh = await dirHandle.getFileHandle(name);
+      const file = await fh.getFile();
+      return await file.arrayBuffer();
+    } catch(e) { /* not found */ }
+  }
+
+  // Try one level deep (in case user picked parent folder)
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind === 'directory') {
+      for (const name of names) {
+        try {
+          const fh = await entry.getFileHandle(name);
+          const file = await fh.getFile();
+          return await file.arrayBuffer();
+        } catch(e) { /* not found */ }
+      }
+    }
+  }
+  return null;
+}
+
+// --- Pick folder (File System Access API) ---
+async function pickFolder() {
+  if (!window.showDirectoryPicker) {
+    setStatus('Dein Browser unterstuetzt keine Ordner-Auswahl. Bitte Datei direkt waehlen oder Chrome/Edge verwenden.', true);
+    return;
+  }
   try {
-    setStatus('Lade ' + label + '...');
-    const resp = await fetch(url, { credentials: 'include' });
-    if (!resp.ok) throw new Error(resp.status);
-    const ct = resp.headers.get('content-type') || '';
-    // Verify we got a binary file, not an HTML login page
-    if (ct.includes('text/html')) throw new Error('Got HTML (login page?)');
-    const buf = await resp.arrayBuffer();
-    if (buf.byteLength < 5000) throw new Error('File too small');
-    return buf;
-  } catch(e) {
-    console.log('Fetch ' + label + ' failed:', e.message);
-    return null;
+    setStatus('Ordner waehlen...');
+    const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
+    setStatus('Suche ' + EXCEL_FILENAME + '...');
+
+    const buf = await readExcelFromDir(dirHandle);
+    if (!buf) {
+      setStatus(EXCEL_FILENAME + ' nicht im Ordner gefunden. Bitte den Ordner waehlen der die Datei enthaelt.', true);
+      return;
+    }
+
+    // Save handle for next time
+    await saveDirHandle(dirHandle);
+
+    const data = parseExcel(buf);
+    saveToCache(data);
+    initViewer(data, 'Ordner: ' + dirHandle.name);
+  } catch(err) {
+    if (err.name === 'AbortError') { setStatus(''); return; } // user cancelled
+    setStatus('Fehler: ' + err.message, true);
+    console.error(err);
   }
 }
 
+// --- Reload from stored directory handle ---
+async function reloadFromSource() {
+  try {
+    const dirHandle = await loadDirHandle();
+    if (dirHandle) {
+      // Re-request permission
+      const perm = await dirHandle.requestPermission({ mode: 'read' });
+      if (perm === 'granted') {
+        setStatus('Aktualisiere...');
+        const buf = await readExcelFromDir(dirHandle);
+        if (buf) {
+          const data = parseExcel(buf);
+          saveToCache(data);
+          initViewer(data, 'Ordner: ' + dirHandle.name);
+          return;
+        }
+      }
+    }
+  } catch(e) { console.warn('Reload failed:', e); }
+  // Fallback: try fetch or show upload
+  clearAndReload();
+}
+
+// --- Try fetching via HTTP (for hosted scenarios) ---
+async function tryFetch(url) {
+  try {
+    const resp = await fetch(url, { credentials: 'include' });
+    if (!resp.ok) return null;
+    const ct = resp.headers.get('content-type') || '';
+    if (ct.includes('text/html')) return null;
+    const buf = await resp.arrayBuffer();
+    return buf.byteLength > 5000 ? buf : null;
+  } catch(e) { return null; }
+}
+
+// --- Main startup ---
 async function autoLoad() {
-  // 1. Try cache first (instant startup)
+  // 1. Cache (instant)
   if (loadFromCache()) return;
 
-  // 2. Try relative path (works when HTML is on same SharePoint folder)
-  let buf = await tryFetch('./' + EXCEL_FILENAME, 'aus gleichem Ordner');
+  // 2. Stored directory handle (File System Access API)
+  try {
+    const dirHandle = await loadDirHandle();
+    if (dirHandle) {
+      setStatus('Lese aus gespeichertem Ordner...');
+      const perm = await dirHandle.queryPermission({ mode: 'read' });
+      if (perm === 'granted') {
+        const buf = await readExcelFromDir(dirHandle);
+        if (buf) {
+          const data = parseExcel(buf);
+          saveToCache(data);
+          initViewer(data, 'Ordner: ' + dirHandle.name);
+          return;
+        }
+      } else {
+        // Need user gesture to request permission - show hint
+        setStatus('Ordner war verbunden. Klicke "Ordner verbinden" um Zugriff zu erneuern.');
+        return;
+      }
+    }
+  } catch(e) { console.log('Dir handle check:', e.message); }
 
-  // 3. Try SharePoint direct URL (works if user is logged in + same domain)
-  if (!buf) {
-    buf = await tryFetch(SHAREPOINT_URL, 'von SharePoint');
-  }
-
-  // 4. Try SharePoint API download endpoint
-  if (!buf) {
-    const apiUrl = "https://buildagil.sharepoint.com/teams/184509/_api/web/GetFileByServerRelativeUrl('/teams/184509/Freigegebene%20Dokumente/30.3_DP/Projektierung/01_BIM/13_Datenkatalog/Datenkatalog_ASTRA.xlsx')/$value";
-    buf = await tryFetch(apiUrl, 'via SharePoint API');
-  }
-
-  if (buf) {
-    try {
-      const data = parseExcel(buf);
-      saveToCache(data);
-      initViewer(data);
-      return;
-    } catch(err) {
-      console.error('Parse error:', err);
+  // 3. Try relative fetch (for hosted scenarios)
+  if (location.protocol !== 'file:') {
+    setStatus('Versuche automatisches Laden...');
+    const buf = await tryFetch('./' + EXCEL_FILENAME);
+    if (buf) {
+      try {
+        const data = parseExcel(buf);
+        saveToCache(data);
+        initViewer(data, 'Auto-fetch');
+        return;
+      } catch(e) { console.error(e); }
     }
   }
 
-  // 5. Fallback: show upload screen
-  setStatus('Automatisches Laden nicht moeglich. Bitte Datei manuell laden.');
+  // 4. Fallback: show upload screen
+  setStatus('');
 }
 
 function loadFromCache() {
@@ -860,7 +982,9 @@ function loadFromCache() {
     if (raw) {
       const data = JSON.parse(raw);
       if (data.properties && data.elements) {
-        initViewer(data);
+        const ts = localStorage.getItem(CACHE_TS_KEY);
+        const date = ts ? new Date(parseInt(ts)).toLocaleString('de-CH') : '';
+        initViewer(data, 'Cache' + (date ? ' vom ' + date : ''));
         return true;
       }
     }
@@ -878,18 +1002,19 @@ function saveToCache(data) {
 function clearAndReload() {
   localStorage.removeItem(CACHE_KEY);
   localStorage.removeItem(CACHE_TS_KEY);
+  clearDirHandle().catch(() => {});
   location.reload();
 }
 
 function handleFile(file) {
   if (!file) return;
-  setStatus('Wird geladen und geparsed...');
+  setStatus('Wird geparsed...');
   const reader = new FileReader();
   reader.onload = function(e) {
     try {
       const data = parseExcel(e.target.result);
       saveToCache(data);
-      initViewer(data);
+      initViewer(data, file.name);
       setStatus('');
     } catch(err) {
       setStatus('Fehler: ' + err.message, true);
@@ -906,17 +1031,16 @@ dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('drag-o
 dropZone.addEventListener('drop', e => {
   e.preventDefault();
   dropZone.classList.remove('drag-over');
-  const file = e.dataTransfer.files[0];
-  if (file) handleFile(file);
+  handleFile(e.dataTransfer.files[0]);
 });
 document.getElementById('fileInput').addEventListener('change', e => {
-  if (e.target.files[0]) handleFile(e.target.files[0]);
+  handleFile(e.target.files[0]);
 });
 
 // ============================================================
 //  Initialize Viewer with parsed data
 // ============================================================
-function initViewer(data) {
+function initViewer(data, source) {
   props = data.properties;
   elems = data.elements;
 
@@ -925,14 +1049,16 @@ function initViewer(data) {
   props.forEach(p => { propByName[p.name] = p; });
 
   // Update toolbar info
-  document.getElementById('toolbarInfo').textContent =
-    props.length + ' Properties | ' + elems.length + ' Bauteile | Geladen: ' + new Date().toLocaleDateString('de-CH');
+  const info = props.length + ' Properties | ' + elems.length + ' Bauteile';
+  const src = source ? ' | ' + source : '';
+  document.getElementById('toolbarInfo').textContent = info + src;
 
   // Show viewer, hide upload
   document.getElementById('uploadScreen').classList.add('hidden');
   document.getElementById('mainTabs').classList.remove('hidden');
   document.getElementById('tab-props').classList.remove('hidden');
   document.getElementById('reloadBtn').classList.remove('hidden');
+  document.getElementById('resetBtn').classList.remove('hidden');
 
   // Populate filters
   const psets = [...new Set(props.map(p => p.pset))].sort();

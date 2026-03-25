@@ -363,20 +363,61 @@ td.wrap { white-space: normal; max-width: 300px; }
 /* Phase filter highlight */
 .phase-active { outline: 2px solid var(--accent); outline-offset: -2px; }
 
-/* Matrix collapsed PSet group header */
-.matrix-table thead tr:first-child th[data-collapsed="1"] {
+/* Matrix collapsed PSet columns */
+.pset-collapsed-header {
   writing-mode: vertical-lr;
   transform: rotate(180deg);
-  min-width: 20px !important;
-  max-width: 20px !important;
-  padding: 6px 2px !important;
+  width: 22px !important;
+  min-width: 22px !important;
+  max-width: 22px !important;
+  padding: 6px 3px !important;
   font-size: 9px;
   white-space: nowrap;
   overflow: hidden;
-  background: var(--bg-primary);
+  text-overflow: ellipsis;
+  background: var(--bg-primary) !important;
   border-left: 2px solid var(--accent) !important;
-  transition: min-width 0.2s, max-width 0.2s;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
 }
+.pset-collapsed-header:hover { background: var(--bg-tertiary) !important; color: var(--accent); }
+.pset-collapsed-sub {
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  overflow: hidden;
+}
+.pset-collapsed-cell {
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  padding: 0 !important;
+  border-left: none !important;
+  border-right: none !important;
+  overflow: hidden;
+}
+
+/* Matrix tooltip for cell details */
+.matrix-tooltip {
+  position: fixed;
+  z-index: 100;
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-lg);
+  padding: 10px 14px;
+  font-size: 12px;
+  max-width: 380px;
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+}
+.matrix-tooltip .tt-title { color: var(--accent); font-weight: 600; margin-bottom: 4px; }
+.matrix-tooltip .tt-prop { color: #fff; font-weight: 600; font-size: 13px; }
+.matrix-tooltip .tt-meta { color: var(--text-secondary); margin-top: 4px; font-size: 11px; }
+.matrix-tooltip .tt-values { margin-top: 6px; }
+.matrix-tooltip .tt-values .val-chip { font-size: 10px; }
 </style>
 </head>
 <body>
@@ -772,6 +813,18 @@ function debouncedFilterMatrix() {
   matrixDebounce = setTimeout(filterMatrix, 250);
 }
 
+// Track which PSets are collapsed (persists across re-renders)
+const collapsedPsets = new Set();
+
+function toggleMatrixPset(psetName) {
+  if (collapsedPsets.has(psetName)) {
+    collapsedPsets.delete(psetName);
+  } else {
+    collapsedPsets.add(psetName);
+  }
+  filterMatrix();
+}
+
 function filterMatrix() {
   const q = document.getElementById("matrixBauteilSearch").value.toLowerCase();
   const fachF = document.getElementById("matrixFachFilter").value;
@@ -800,7 +853,7 @@ function filterMatrix() {
     psetGroups[p.pset].push(p);
   });
 
-  // Filter: only PSets that have at least one relevant property for filtered elements
+  // Filter: only PSets that have at least one relevant property
   const relevantPsets = {};
   Object.entries(psetGroups).forEach(([ps, pList]) => {
     let filteredProps = pList;
@@ -821,184 +874,191 @@ function filterMatrix() {
     return;
   }
 
-  // Build matrix HTML with PSet group separators
-  let html = '<table class="matrix-table"><thead><tr>';
-  html += '<th class="sticky-col">Bauteil</th>';
-
-  // Column headers grouped by PSet
   const orderedPsets = Object.keys(relevantPsets).sort();
-  const allCols = []; // {pset, prop}
-  orderedPsets.forEach(ps => {
-    relevantPsets[ps].forEach(p => allCols.push({pset: ps, prop: p}));
-  });
 
-  allCols.forEach(c => {
-    html += '<th class="col-header" title="' + esc(c.pset) + ' / ' + esc(c.prop.name) + '">' + esc(c.prop.name) + '</th>';
-  });
-  html += '</tr></thead><tbody>';
+  // === Build table ===
+  let h = '<table class="matrix-table"><thead>';
 
-  // PSet group separator row + data rows
-  // Build a flat list: group-header-row then data-cells per PSet
-  // Actually for a matrix we need all columns in every row. Let me build pset group separators as rows that span columns.
-
-  // Better approach: render all data rows, but add PSet separator rows above the column headers
-  // Actually, the most practical approach: collapsible PSet groups as column groups
-
-  // Simplest effective approach: One header row with PSet group sub-headers
-  // Let me build a second header row showing PSet groups
-  let html2 = '<table class="matrix-table"><thead>';
+  // Determine if IFC info columns are collapsed
+  const ifcCollapsed = collapsedPsets.has('__ifc__');
 
   // Row 1: PSet group headers
-  html2 += '<tr><th class="sticky-col" rowspan="2" style="vertical-align:bottom">Bauteil';
-  if (truncated) html2 += '<br><span style="color:var(--warning);font-weight:normal;font-size:10px">(max 80 angezeigt)</span>';
-  html2 += '</th>';
+  h += '<tr><th class="sticky-col" rowspan="2" style="vertical-align:bottom">Bauteil';
+  if (truncated) h += '<br><span style="color:var(--warning);font-weight:normal;font-size:10px">(max 80)</span>';
+  h += '</th>';
 
+  // IFC info group (collapsible)
+  if (ifcCollapsed) {
+    h += '<th colspan="1" class="pset-collapsed-header" onclick="toggleMatrixPset(\'__ifc__\')" title="IFC / Metadaten — Klick zum Aufklappen">' +
+      '<span class="chevron" style="font-size:8px">&#9654;</span> IFC / Meta</th>';
+  } else {
+    h += '<th colspan="4" style="text-align:center;color:var(--text-secondary);font-size:10px;padding:4px;border-left:2px solid var(--border);cursor:pointer;white-space:normal" ' +
+      'onclick="toggleMatrixPset(\'__ifc__\')" title="IFC / Metadaten — Klick zum Einklappen">' +
+      '<span class="chevron" style="font-size:8px">&#9660;</span> IFC / Metadaten</th>';
+  }
+
+  // PSet group headers
   orderedPsets.forEach(ps => {
+    const isC = collapsedPsets.has(ps);
     const cnt = relevantPsets[ps].length;
-    html2 += '<th colspan="' + cnt + '" style="text-align:center;color:var(--accent);font-size:10px;padding:4px;border-left:2px solid var(--border);cursor:pointer;white-space:normal" ' +
-      'onclick="toggleMatrixPset(this, ' + cnt + ')" title="Klick zum Ein-/Ausklappen">' +
-      '<span class="chevron" style="font-size:8px">&#9660;</span> ' + esc(shortPset(ps)) + '</th>';
-  });
-  html2 += '</tr>';
+    const label = shortPset(ps);
+    const psEsc = esc(ps).replace(/'/g, "\\'");
 
-  // Row 2: Property names
-  html2 += '<tr>';
-  orderedPsets.forEach((ps, psIdx) => {
-    relevantPsets[ps].forEach((p, i) => {
-      const borderLeft = i === 0 ? 'border-left:2px solid var(--border);' : '';
-      html2 += '<th class="col-header" data-pset="' + esc(ps) + '" style="' + borderLeft + '" title="' + esc(p.name) + '">' + esc(p.name) + '</th>';
-    });
+    if (isC) {
+      h += '<th colspan="1" class="pset-collapsed-header" ' +
+        'onclick="toggleMatrixPset(\'' + psEsc + '\')" ' +
+        'title="' + esc(label) + ' (' + cnt + ' Props) — Aufklappen">' +
+        '<span class="chevron" style="font-size:8px">&#9654;</span> ' + esc(label) + '</th>';
+    } else {
+      h += '<th colspan="' + cnt + '" style="text-align:center;color:var(--accent);font-size:10px;padding:4px;border-left:2px solid var(--border);cursor:pointer;white-space:normal" ' +
+        'onclick="toggleMatrixPset(\'' + psEsc + '\')" ' +
+        'title="' + esc(label) + ' — Einklappen">' +
+        '<span class="chevron" style="font-size:8px">&#9660;</span> ' + esc(label) + '</th>';
+    }
   });
-  html2 += '</tr></thead><tbody>';
+  h += '</tr>';
+
+  // Row 2: Property name sub-headers
+  h += '<tr>';
+
+  // IFC sub-headers
+  if (ifcCollapsed) {
+    h += '<th class="pset-collapsed-sub"></th>';
+  } else {
+    h += '<th class="col-header" style="border-left:2px solid var(--border);">Entity</th>';
+    h += '<th class="col-header">Predefined</th>';
+    h += '<th class="col-header">eBKP-T</th>';
+    h += '<th class="col-header">Fachgebiet</th>';
+  }
+
+  // Property sub-headers
+  orderedPsets.forEach(ps => {
+    const isC = collapsedPsets.has(ps);
+    if (isC) {
+      h += '<th class="pset-collapsed-sub"></th>';
+    } else {
+      relevantPsets[ps].forEach((p, i) => {
+        const bl = i === 0 ? 'border-left:2px solid var(--border);' : '';
+        h += '<th class="col-header" style="' + bl + '" title="' + esc(ps) + ' / ' + esc(p.name) + '">' + esc(p.name) + '</th>';
+      });
+    }
+  });
+  h += '</tr></thead><tbody>';
 
   // Data rows
-  filtElems.forEach(e => {
-    html2 += '<tr>';
-    html2 += '<td class="sticky-col" title="' + esc(e.bauteilbezeichnung) + '">' + esc(e.bauteilbezeichnung) + '</td>';
+  filtElems.forEach((e, eIdx) => {
+    h += '<tr>';
+    h += '<td class="sticky-col" title="' + esc(e.bauteilbezeichnung) + '">' + esc(e.bauteilbezeichnung) + '</td>';
 
-    orderedPsets.forEach((ps, psIdx) => {
-      relevantPsets[ps].forEach((p, i) => {
-        const v = e.pflicht[p.name] || 0;
-        const borderLeft = i === 0 ? 'border-left:2px solid var(--border);' : '';
-        let cellContent;
+    // IFC info cells
+    if (ifcCollapsed) {
+      h += '<td class="pset-collapsed-cell"></td>';
+    } else {
+      h += '<td style="font-size:11px;border-left:2px solid var(--border);color:var(--text-secondary)">' + esc(e.ifc43_entity) + '</td>';
+      h += '<td style="font-size:10px;color:var(--text-secondary)">' + esc(e.ifc43_predefined || '-') + '</td>';
+      h += '<td style="font-size:10px;color:var(--text-secondary)">' + esc(e.ebkpt) + '</td>';
+      h += '<td style="font-size:10px;color:var(--text-secondary)">' + esc(e.fachgebiet) + '</td>';
+    }
 
-        if (phase > 0) {
-          // Phase filter active: show only matching phase, highlight required
-          if (v === phase) {
-            cellContent = badge(v);
-          } else if (v > 0 && v < phase) {
-            // Already required in earlier phase
-            cellContent = '<span style="color:var(--text-secondary);font-size:10px">' + v + '</span>';
+    // Property cells
+    orderedPsets.forEach(ps => {
+      const isC = collapsedPsets.has(ps);
+      if (isC) {
+        h += '<td class="pset-collapsed-cell"></td>';
+      } else {
+        relevantPsets[ps].forEach((p, i) => {
+          const v = e.pflicht[p.name] || 0;
+          const bl = i === 0 ? 'border-left:2px solid var(--border);' : '';
+          let cc;
+          if (phase > 0) {
+            if (v === phase) {
+              cc = badge(v);
+            } else if (v > 0 && v < phase) {
+              cc = '<span style="color:var(--text-secondary);font-size:10px">' + v + '</span>';
+            } else {
+              cc = '<span style="color:#333">-</span>';
+            }
           } else {
-            cellContent = '<span style="color:#333">-</span>';
+            cc = v > 0 ? badge(v) : '<span style="color:#333">-</span>';
           }
-        } else {
-          cellContent = v > 0 ? badge(v) : '<span style="color:#333">-</span>';
-        }
-
-        html2 += '<td class="cell" data-pset="' + esc(ps) + '" style="' + borderLeft + '">' + cellContent + '</td>';
-      });
+          // data attributes for tooltip on click
+          h += '<td class="cell" style="' + bl + '" data-eidx="' + eIdx + '" data-prop="' + esc(p.name) + '">' + cc + '</td>';
+        });
+      }
     });
-    html2 += '</tr>';
+    h += '</tr>';
   });
 
-  html2 += '</tbody></table>';
-  wrap.innerHTML = html2;
-}
+  h += '</tbody></table>';
+  wrap.innerHTML = h;
 
-// Toggle PSet columns in matrix — collapse to single narrow column
-function toggleMatrixPset(headerTh, colCount) {
-  const chevron = headerTh.querySelector('.chevron');
-  const table = headerTh.closest('table');
-  const isCollapsed = headerTh.dataset.collapsed === '1';
+  // Store filtered elements for tooltip access
+  wrap._filtElems = filtElems;
 
-  const headerRow2 = table.querySelector('thead tr:nth-child(2)');
-  const allTh2 = headerRow2.querySelectorAll('th');
-  const headerRow1 = table.querySelector('thead tr:nth-child(1)');
-  const groupHeaders = headerRow1.querySelectorAll('th:not(.sticky-col)');
+  // Click handler for cell tooltips
+  wrap.onclick = function(ev) {
+    const td = ev.target.closest('td.cell[data-prop]');
+    if (!td) { removeTooltip(); return; }
+    ev.stopPropagation();
 
-  let startIdx = 0;
-  let found = false;
-  for (const gh of groupHeaders) {
-    if (gh === headerTh) { found = true; break; }
-    startIdx += parseInt(gh.getAttribute('colspan') || 1);
-  }
-  if (!found) return;
+    const propName = td.dataset.prop;
+    const eIdx = parseInt(td.dataset.eidx);
+    const elem = wrap._filtElems[eIdx];
+    const prop = propByName[propName];
+    if (!prop || !elem) return;
 
-  if (isCollapsed) {
-    // === EXPAND ===
-    headerTh.dataset.collapsed = '0';
-    headerTh.setAttribute('colspan', colCount);
-    chevron.innerHTML = '&#9660;';
-    headerTh.style.minWidth = '';
-    headerTh.style.maxWidth = '';
-    headerTh.style.writingMode = '';
-    headerTh.style.whiteSpace = 'normal';
-    headerTh.style.fontSize = '10px';
+    const level = elem.pflicht[propName] || 0;
 
-    for (let i = startIdx; i < startIdx + colCount; i++) {
-      allTh2[i].style.display = '';
-    }
-    table.querySelectorAll('tbody tr').forEach(tr => {
-      const cells = tr.querySelectorAll('td:not(.sticky-col)');
-      for (let i = startIdx; i < startIdx + colCount; i++) {
-        if (cells[i]) {
-          cells[i].style.display = '';
-          cells[i].style.width = '';
-          cells[i].style.minWidth = '';
-          cells[i].style.maxWidth = '';
-          cells[i].style.padding = '';
-        }
-      }
-    });
-  } else {
-    // === COLLAPSE to single narrow bar ===
-    headerTh.dataset.collapsed = '1';
-    headerTh.setAttribute('colspan', 1);
-    chevron.innerHTML = '&#9654;';
-    // Make the group header itself narrow + vertical
-    headerTh.style.minWidth = '20px';
-    headerTh.style.maxWidth = '20px';
-    headerTh.style.writingMode = 'vertical-lr';
-    headerTh.style.whiteSpace = 'nowrap';
-    headerTh.style.fontSize = '9px';
+    // Build tooltip
+    removeTooltip();
+    const tt = document.createElement('div');
+    tt.className = 'matrix-tooltip';
+    tt.id = 'matrixTooltip';
 
-    // Hide all sub-columns except the first (which becomes the narrow placeholder)
-    for (let i = startIdx; i < startIdx + colCount; i++) {
-      if (i === startIdx) {
-        allTh2[i].style.display = '';
-        allTh2[i].innerHTML = '';
-        allTh2[i].style.width = '0';
-        allTh2[i].style.minWidth = '0';
-        allTh2[i].style.maxWidth = '0';
-        allTh2[i].style.padding = '0';
-        allTh2[i].style.borderLeft = 'none';
-        allTh2[i].style.overflow = 'hidden';
+    let inner = '<div class="tt-title">' + esc(elem.bauteilbezeichnung) + '</div>';
+    inner += '<div class="tt-prop">' + esc(propName) + ' ' + badge(level) + '</div>';
+    inner += '<div class="tt-meta">' + esc(prop.pset) + ' | ' + esc(prop.datentyp) + '</div>';
+    if (prop.beschreibung) inner += '<div class="tt-meta">' + esc(prop.beschreibung) + '</div>';
+
+    // Wertebereich
+    if (prop.wertebereich && prop.wertebereich !== 'None') {
+      const vals = prop.wertebereich.split(',').map(v => v.trim()).filter(Boolean);
+      if (vals.length > 1) {
+        const show = vals.slice(0, 30);
+        inner += '<div class="tt-values"><div style="color:var(--text-secondary);font-size:10px;margin-bottom:2px">ERLAUBTE WERTE (' + vals.length + '):</div>';
+        inner += '<div class="values-list">' + show.map(v => '<span class="val-chip">' + esc(v) + '</span>').join('') + '</div>';
+        if (vals.length > 30) inner += '<div style="color:var(--text-secondary);font-size:10px;margin-top:2px">... und ' + (vals.length - 30) + ' weitere</div>';
+        inner += '</div>';
       } else {
-        allTh2[i].style.display = 'none';
+        inner += '<div class="tt-meta">Wertebereich: <code>' + esc(prop.wertebereich) + '</code></div>';
       }
     }
-    table.querySelectorAll('tbody tr').forEach(tr => {
-      const cells = tr.querySelectorAll('td:not(.sticky-col)');
-      for (let i = startIdx; i < startIdx + colCount; i++) {
-        if (i === startIdx) {
-          if (cells[i]) {
-            cells[i].style.display = '';
-            cells[i].innerHTML = '';
-            cells[i].style.width = '0';
-            cells[i].style.minWidth = '0';
-            cells[i].style.maxWidth = '0';
-            cells[i].style.padding = '0';
-            cells[i].style.borderLeft = 'none';
-            cells[i].style.overflow = 'hidden';
-          }
-        } else {
-          if (cells[i]) cells[i].style.display = 'none';
-        }
-      }
-    });
-  }
+
+    tt.innerHTML = inner;
+    document.body.appendChild(tt);
+
+    // Position near cell
+    const rect = td.getBoundingClientRect();
+    let left = rect.right + 8;
+    let top = rect.top;
+    if (left + 380 > window.innerWidth) left = rect.left - 388;
+    if (left < 0) left = 8;
+    if (top + tt.offsetHeight > window.innerHeight) top = window.innerHeight - tt.offsetHeight - 8;
+    tt.style.left = left + 'px';
+    tt.style.top = top + 'px';
+    tt.style.pointerEvents = 'auto';
+  };
 }
+
+function removeTooltip() {
+  const old = document.getElementById('matrixTooltip');
+  if (old) old.remove();
+}
+document.addEventListener('click', function(ev) {
+  if (!ev.target.closest('.matrix-tooltip') && !ev.target.closest('td.cell[data-prop]')) {
+    removeTooltip();
+  }
+});
 
 
 // ============================================================

@@ -173,6 +173,7 @@ select { min-width: 180px; }
 
 /* ===== Tables ===== */
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.matrix-table { width: max-content; }
 th {
   background: var(--bg-tertiary);
   position: sticky;
@@ -302,18 +303,24 @@ td.wrap { white-space: normal; max-width: 300px; }
 .hidden { display: none !important; }
 
 /* ===== Matrix ===== */
+.matrix-table {
+  width: max-content;
+  table-layout: fixed;
+}
 .matrix-table th.col-header {
   writing-mode: vertical-lr;
   transform: rotate(180deg);
   font-size: 10px;
   padding: 4px 2px;
   max-height: 160px;
+  width: 28px;
   min-width: 28px;
   text-align: left;
 }
 .matrix-table td.cell {
   text-align: center;
   padding: 3px 2px;
+  width: 28px;
   min-width: 28px;
 }
 .matrix-table .sticky-col {
@@ -323,8 +330,9 @@ td.wrap { white-space: normal; max-width: 300px; }
   background: var(--bg-secondary);
   font-weight: 600;
   font-size: 11px;
-  min-width: 180px;
-  max-width: 220px;
+  width: 200px;
+  min-width: 200px;
+  max-width: 200px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -391,6 +399,8 @@ td.wrap { white-space: normal; max-width: 300px; }
   padding: 0 !important;
   border: none !important;
   overflow: hidden;
+  font-size: 0;
+  line-height: 0;
 }
 .pset-collapsed-cell {
   width: 0 !important;
@@ -400,6 +410,18 @@ td.wrap { white-space: normal; max-width: 300px; }
   border-left: none !important;
   border-right: none !important;
   overflow: hidden;
+  font-size: 0;
+  line-height: 0;
+}
+/* IFC info columns fixed width */
+.matrix-table .ifc-col {
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Matrix detail panel (replaces tooltip) */
@@ -958,10 +980,10 @@ function filterMatrix() {
   if (ifcCollapsed) {
     h += '<th class="pset-collapsed-sub"></th>';
   } else {
-    h += '<th class="col-header" style="border-left:2px solid var(--border);">Entity</th>';
-    h += '<th class="col-header">Predefined</th>';
-    h += '<th class="col-header">eBKP-T</th>';
-    h += '<th class="col-header">Fachgebiet</th>';
+    h += '<th class="col-header ifc-col" style="border-left:2px solid var(--border);">Entity</th>';
+    h += '<th class="col-header ifc-col">Predefined</th>';
+    h += '<th class="col-header ifc-col">eBKP-T</th>';
+    h += '<th class="col-header ifc-col">Fachgebiet</th>';
   }
 
   // Property sub-headers
@@ -987,10 +1009,10 @@ function filterMatrix() {
     if (ifcCollapsed) {
       h += '<td class="pset-collapsed-cell"></td>';
     } else {
-      h += '<td style="font-size:11px;border-left:2px solid var(--border);color:var(--text-secondary)">' + esc(e.ifc43_entity) + '</td>';
-      h += '<td style="font-size:10px;color:var(--text-secondary)">' + esc(e.ifc43_predefined || '-') + '</td>';
-      h += '<td style="font-size:10px;color:var(--text-secondary)">' + esc(e.ebkpt) + '</td>';
-      h += '<td style="font-size:10px;color:var(--text-secondary)">' + esc(e.fachgebiet) + '</td>';
+      h += '<td class="ifc-col" style="border-left:2px solid var(--border);color:var(--text-secondary)" title="' + esc(e.ifc43_entity) + '">' + esc(e.ifc43_entity) + '</td>';
+      h += '<td class="ifc-col" style="color:var(--text-secondary)" title="' + esc(e.ifc43_predefined || '-') + '">' + esc(e.ifc43_predefined || '-') + '</td>';
+      h += '<td class="ifc-col" style="color:var(--text-secondary)" title="' + esc(e.ebkpt) + '">' + esc(e.ebkpt) + '</td>';
+      h += '<td class="ifc-col" style="color:var(--text-secondary)" title="' + esc(e.fachgebiet) + '">' + esc(e.fachgebiet) + '</td>';
     }
 
     // Property cells

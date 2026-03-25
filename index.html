@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Datenkatalog ASTRA - BUGAW | B+S AG</title>
+<style>
+/* ===== B+S AG Corporate Theme (from IFC-Editor) ===== */
+:root {
+  --accent: #CB0231;
+  --accent-hover: #e0033a;
+  --accent-light: rgba(203, 2, 49, 0.15);
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #222222;
+  --bg-tertiary: #2a2a2a;
+  --text-primary: #e0e0e0;
+  --text-secondary: #909090;
+  --border: #404040;
+  --success: #4ec9b0;
+  --warning: #dcdcaa;
+  --error: #f14c4c;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 8px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+  /* Phase colors */
+  --p0: #555; --p2: #4ec9b0; --p3: #dcdcaa; --p4: #d19a66; --p5: #CB0231;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 13px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: #4a4a4a; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #5a5a5a; }
+
+/* ===== Header / Toolbar ===== */
+.toolbar {
+  min-height: 48px;
+  background: linear-gradient(180deg, var(--bg-tertiary), var(--bg-secondary));
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 16px;
+}
+.toolbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-right: 16px;
+  border-right: 1px solid var(--border);
+}
+.toolbar-brand .logo-text {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #fff;
+}
+.toolbar-brand .logo-red {
+  color: var(--accent);
+}
+.toolbar-brand .app-name {
+  font-size: 13px;
+  font-weight: 300;
+  letter-spacing: 3px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+.toolbar-info {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-left: auto;
+}
+
+/* ===== Tabs ===== */
+.tabs {
+  display: flex;
+  gap: 0;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+}
+.tab {
+  padding: 10px 20px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-bottom: 2px solid transparent;
+  font-size: 13px;
+  transition: all 0.15s;
+  user-select: none;
+  letter-spacing: 0.3px;
+}
+.tab:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+.tab.active { color: #fff; border-bottom-color: var(--accent); }
+
+/* ===== Main Content ===== */
+.container { max-width: 1800px; margin: 0 auto; padding: 16px; }
+
+/* ===== Filters ===== */
+.filters {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  align-items: flex-end;
+}
+.filter-group { display: flex; flex-direction: column; gap: 3px; }
+.filter-group label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+input, select {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input:focus, select:focus { border-color: var(--accent); }
+input[type=text] { min-width: 260px; }
+select { min-width: 180px; }
+
+/* ===== Badges ===== */
+.badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.badge-0 { background: var(--p0); color: #ccc; }
+.badge-2 { background: var(--p2); color: #111; }
+.badge-3 { background: var(--p3); color: #111; }
+.badge-4 { background: var(--p4); color: #111; }
+.badge-5 { background: var(--p5); color: #fff; }
+
+.legend {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+/* ===== Tables ===== */
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th {
+  background: var(--bg-tertiary);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--text-secondary);
+}
+th, td {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+tbody tr { transition: background 0.1s; }
+tbody tr:hover td { background: var(--accent-light); }
+td.wrap { white-space: normal; max-width: 300px; }
+
+.table-wrap {
+  max-height: calc(100vh - 260px);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+}
+
+/* ===== Detail Panels ===== */
+.detail-panel {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  margin-bottom: 12px;
+  max-height: 65vh;
+  overflow-y: auto;
+}
+.detail-panel h3 {
+  color: #fff;
+  font-size: 16px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.detail-panel h3 .accent { color: var(--accent); }
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px;
+  font-size: 12px;
+}
+.meta-grid dt { color: var(--text-secondary); font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px; }
+.meta-grid dd { margin-bottom: 4px; }
+
+.values-list { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+.val-chip {
+  background: var(--bg-tertiary);
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  border: 1px solid var(--border);
+}
+
+.close-btn {
+  float: right;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: var(--radius-md);
+  transition: all 0.15s;
+}
+.close-btn:hover { background: var(--accent); color: #fff; }
+
+/* ===== Collapsible Groups ===== */
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: 4px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+.group-header:hover { background: var(--border); }
+.group-header .chevron {
+  display: inline-block;
+  transition: transform 0.2s;
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+.group-header .chevron.collapsed { transform: rotate(-90deg); }
+.group-header .group-title {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--accent);
+}
+.group-header .group-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-left: auto;
+}
+.group-body { margin-bottom: 8px; }
+.group-body.collapsed { display: none; }
+
+/* ===== Bauteil meta row ===== */
+.bauteil-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.bauteil-meta span { display: flex; align-items: center; gap: 4px; }
+.bauteil-meta .label { color: var(--text-secondary); }
+.bauteil-meta .value { color: var(--text-primary); }
+
+.hidden { display: none !important; }
+
+/* ===== Matrix ===== */
+.matrix-table th.col-header {
+  writing-mode: vertical-lr;
+  transform: rotate(180deg);
+  font-size: 10px;
+  padding: 4px 2px;
+  max-height: 160px;
+  min-width: 28px;
+  text-align: left;
+}
+.matrix-table td.cell {
+  text-align: center;
+  padding: 3px 2px;
+  min-width: 28px;
+}
+.matrix-table .sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bg-secondary);
+  font-weight: 600;
+  font-size: 11px;
+  min-width: 180px;
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.matrix-table th.sticky-col {
+  z-index: 3;
+  background: var(--bg-tertiary);
+}
+.matrix-group-row td {
+  background: var(--bg-tertiary) !important;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 4px 10px !important;
+}
+.matrix-group-row:hover td { background: var(--border) !important; }
+
+/* IFC info collapsible in Bauteil tab */
+.ifc-info-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  transition: all 0.15s;
+}
+.ifc-info-toggle:hover { border-color: var(--accent); color: var(--text-primary); }
+
+/* Phase filter highlight */
+.phase-active { outline: 2px solid var(--accent); outline-offset: -2px; }
+</style>
+</head>
+<body>
+
+<!-- ===== Toolbar ===== -->
+<div class="toolbar">
+  <div class="toolbar-brand">
+    <div>
+      <div class="logo-text">B+S<span class="logo-red"> AG</span></div>
+    </div>
+    <div class="app-name">Datenkatalog Viewer</div>
+  </div>
+  <div class="toolbar-info">
+    Projekt BUGAW | Elementplan | 16.03.2026 | 209 Properties | 442 Bauteile
+  </div>
+</div>
+
+<!-- ===== Tabs ===== -->
+<div class="tabs">
+  <div class="tab active" data-tab="props">Properties</div>
+  <div class="tab" data-tab="bauteile">Bauteile</div>
+  <div class="tab" data-tab="matrix">Matrix</div>
+</div>
+
+<!-- ===== TAB 1: Property View ===== -->
+<div class="container tab-content" id="tab-props">
+  <div class="legend">
+    Pflicht:
+    <span class="badge badge-0">0 Optional</span>
+    <span class="badge badge-2">2 Studie</span>
+    <span class="badge badge-3">3 Bauprojekt</span>
+    <span class="badge badge-4">4 Ausschreibung</span>
+    <span class="badge badge-5">5 Ausfuehrung</span>
+  </div>
+  <div class="filters">
+    <div class="filter-group">
+      <label>Property suchen</label>
+      <input type="text" id="propSearch" placeholder="z.B. Materialtyp, Betonsorte..." oninput="filterProps()">
+    </div>
+    <div class="filter-group">
+      <label>PropertySet</label>
+      <select id="psetFilter" onchange="filterProps()"><option value="">Alle PSets</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Projektphase (min. Pflicht)</label>
+      <select id="pflichtFilter" onchange="filterProps()">
+        <option value="0">Alle (inkl. optional)</option>
+        <option value="2">2+ Studie / Vorprojekt</option>
+        <option value="3">3+ Bauprojekt</option>
+        <option value="4">4+ Ausschreibung</option>
+        <option value="5">5 Ausfuehrung</option>
+      </select>
+    </div>
+  </div>
+  <div id="propDetail" class="detail-panel hidden"></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Property</th><th>PropertySet</th><th>Datentyp</th><th>Zugewiesen</th><th>Beschreibung</th>
+      </tr></thead>
+      <tbody id="propsBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ===== TAB 2: Bauteil View ===== -->
+<div class="container tab-content hidden" id="tab-bauteile">
+  <div class="legend">
+    Pflicht:
+    <span class="badge badge-0">0 Optional</span>
+    <span class="badge badge-2">2 Studie</span>
+    <span class="badge badge-3">3 Bauprojekt</span>
+    <span class="badge badge-4">4 Ausschreibung</span>
+    <span class="badge badge-5">5 Ausfuehrung</span>
+  </div>
+  <div class="filters">
+    <div class="filter-group">
+      <label>Bauteil suchen</label>
+      <input type="text" id="bauteilSearch" placeholder="z.B. Bohrpfahl, Wand, Decke..." oninput="filterBauteile()">
+    </div>
+    <div class="filter-group">
+      <label>Fachgebiet</label>
+      <select id="fachFilter" onchange="filterBauteile()"><option value="">Alle Fachgebiete</option></select>
+    </div>
+    <div class="filter-group">
+      <label>IFC Entity</label>
+      <select id="ifcFilter" onchange="filterBauteile()"><option value="">Alle Entities</option></select>
+    </div>
+  </div>
+  <div id="bauteilDetail" class="detail-panel hidden"></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Bauteilbezeichnung</th><th>IFC 4.3 Entity</th><th>PredefinedType</th><th>eBKP-T</th><th>Fachgebiet</th><th>Pflicht-Props</th>
+      </tr></thead>
+      <tbody id="bauteileBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ===== TAB 3: Matrix View ===== -->
+<div class="container tab-content hidden" id="tab-matrix">
+  <div class="legend">
+    Pflicht:
+    <span class="badge badge-0">0 Opt</span>
+    <span class="badge badge-2">2 Studie</span>
+    <span class="badge badge-3">3 BauP</span>
+    <span class="badge badge-4">4 Ausschr</span>
+    <span class="badge badge-5">5 Ausf</span>
+  </div>
+  <div class="filters">
+    <div class="filter-group">
+      <label>Bauteil suchen</label>
+      <input type="text" id="matrixBauteilSearch" placeholder="Bauteil..." oninput="debouncedFilterMatrix()">
+    </div>
+    <div class="filter-group">
+      <label>Fachgebiet</label>
+      <select id="matrixFachFilter" onchange="filterMatrix()"><option value="">Alle Fachgebiete</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Projektphase</label>
+      <select id="matrixPhaseFilter" onchange="filterMatrix()">
+        <option value="0">Alle Phasen</option>
+        <option value="2">Phase 2: Studie / Vorprojekt</option>
+        <option value="3">Phase 3: Bauprojekt</option>
+        <option value="4">Phase 4: Ausschreibung</option>
+        <option value="5">Phase 5: Ausfuehrung</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Anzeige</label>
+      <select id="matrixShowMode" onchange="filterMatrix()">
+        <option value="relevant" selected>Nur relevante Properties</option>
+        <option value="all">Alle Properties</option>
+      </select>
+    </div>
+  </div>
+  <div class="table-wrap" id="matrixWrap" style="max-height: calc(100vh - 260px);">
+    <div style="padding:14px; color: var(--text-secondary); font-size: 12px;">
+      Bauteil eingeben oder Fachgebiet waehlen um Matrix zu laden...
+    </div>
+  </div>
+</div>
+
+<!-- ===== Data (loaded externally for dev, embedded for production) ===== -->
+<script src="data.js"></script>
+<script>
+"use strict";
+
+const props = DATA.properties;
+const elems = DATA.elements;
+
+// Build lookup
+const propByName = {};
+props.forEach(p => { propByName[p.name] = p; });
+
+// Unique values for filters
+const psets = [...new Set(props.map(p => p.pset))].sort();
+const fachs = [...new Set(elems.map(e => e.fachgebiet).filter(Boolean))].sort();
+const ifcs  = [...new Set(elems.map(e => e.ifc43_entity).filter(Boolean))].sort();
+
+function fillSelect(id, items) {
+  const sel = document.getElementById(id);
+  items.forEach(v => {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = v;
+    sel.appendChild(o);
+  });
+}
+fillSelect("psetFilter", psets);
+fillSelect("fachFilter", fachs);
+fillSelect("matrixFachFilter", fachs);
+fillSelect("ifcFilter", ifcs);
+
+// Tab switching
+document.querySelectorAll(".tab").forEach(t => {
+  t.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+    document.querySelectorAll(".tab-content").forEach(x => x.classList.add("hidden"));
+    t.classList.add("active");
+    document.getElementById("tab-" + t.dataset.tab).classList.remove("hidden");
+  });
+});
+
+// Helpers
+function esc(s) {
+  if (!s) return "";
+  const d = document.createElement("div");
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+
+function badge(level) {
+  const labels = {0:"0 Opt", 2:"2 Studie", 3:"3 BauP", 4:"4 Ausschr", 5:"5 Ausf"};
+  return '<span class="badge badge-' + level + '">' + (labels[level] || level) + '</span>';
+}
+
+function shortPset(ps) {
+  return ps.replace("CH_02_Spezifikation_", "").replace("CH_01_", "").replace("CH_03_", "").replace("CH_04_", "").replace("CH_05_", "");
+}
+
+// Pre-compute property assignment counts
+const propCounts = {};
+props.forEach(p => {
+  propCounts[p.name] = elems.filter(e => (e.pflicht[p.name] || 0) > 0).length;
+});
+
+
+// ============================================================
+//  TAB 1: Properties
+// ============================================================
+function filterProps() {
+  const q = document.getElementById("propSearch").value.toLowerCase();
+  const pset = document.getElementById("psetFilter").value;
+  const minP = parseInt(document.getElementById("pflichtFilter").value);
+  const tbody = document.getElementById("propsBody");
+  tbody.innerHTML = "";
+
+  const filtered = props.filter(p => {
+    if (q && !p.name.toLowerCase().includes(q) && !p.beschreibung.toLowerCase().includes(q) && !p.pset.toLowerCase().includes(q)) return false;
+    if (pset && p.pset !== pset) return false;
+    if (minP > 0 && !elems.some(e => (e.pflicht[p.name] || 0) >= minP)) return false;
+    return true;
+  });
+
+  filtered.forEach(p => {
+    const cnt = propCounts[p.name] || 0;
+    const tr = document.createElement("tr");
+    tr.style.cursor = "pointer";
+    tr.onclick = () => showPropDetail(p);
+    tr.innerHTML =
+      '<td><strong>' + esc(p.name) + '</strong></td>' +
+      '<td style="color:var(--text-secondary)">' + esc(shortPset(p.pset)) + '</td>' +
+      '<td>' + esc(p.datentyp) + '</td>' +
+      '<td>' + cnt + ' / ' + elems.length + '</td>' +
+      '<td class="wrap" style="color:var(--text-secondary)">' + esc((p.beschreibung || '').substring(0, 100)) + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function showPropDetail(p) {
+  const div = document.getElementById("propDetail");
+  div.classList.remove("hidden");
+
+  let werte = "";
+  if (p.wertebereich && p.wertebereich !== "None" && p.wertebereich.length > 0) {
+    const vals = p.wertebereich.split(",").map(v => v.trim()).filter(Boolean);
+    if (vals.length > 1) {
+      werte = '<div style="margin-top:8px"><dt style="color:var(--text-secondary);font-size:10px;text-transform:uppercase;letter-spacing:0.3px">Wertebereich (' + vals.length + ' Werte)</dt>' +
+        '<div class="values-list">' + vals.map(v => '<span class="val-chip">' + esc(v) + '</span>').join("") + '</div></div>';
+    } else {
+      werte = '<div style="margin-top:8px"><dt style="color:var(--text-secondary);font-size:10px;text-transform:uppercase">Wertebereich</dt><dd><code>' + esc(p.wertebereich) + '</code></dd></div>';
+    }
+  }
+
+  const elemRows = elems
+    .map(e => ({name: e.bauteilbezeichnung, level: e.pflicht[p.name] || 0, fach: e.fachgebiet, ifc: e.ifc43_entity}))
+    .filter(e => e.level > 0)
+    .sort((a, b) => b.level - a.level);
+
+  div.innerHTML =
+    '<span class="close-btn" onclick="this.parentElement.classList.add(\'hidden\')">&times;</span>' +
+    '<h3><span class="accent">' + esc(p.pset) + '</span> / ' + esc(p.name) + '</h3>' +
+    '<div class="meta-grid">' +
+      '<div><dt>Datentyp</dt><dd>' + esc(p.datentyp) + '</dd></div>' +
+      '<div><dt>Allplan ID</dt><dd>' + esc(p.allplan_id) + '</dd></div>' +
+      '<div><dt>Standardwert</dt><dd>' + esc(p.standardwert || '-') + '</dd></div>' +
+    '</div>' +
+    '<div style="margin-top:6px"><dt style="color:var(--text-secondary);font-size:10px;text-transform:uppercase">Beschreibung</dt><dd>' + esc(p.beschreibung || '-') + '</dd></div>' +
+    werte +
+    '<div style="margin-top:10px"><dt style="color:var(--text-secondary);font-size:10px;text-transform:uppercase">Zugewiesene Bauteile (' + elemRows.length + ')</dt>' +
+    '<table style="margin-top:4px"><thead><tr><th>Bauteil</th><th>Pflicht</th><th>Fachgebiet</th><th>IFC Entity</th></tr></thead><tbody>' +
+    elemRows.map(e =>
+      '<tr><td>' + esc(e.name) + '</td><td>' + badge(e.level) + '</td><td style="color:var(--text-secondary)">' + esc(e.fach) + '</td><td style="color:var(--text-secondary)">' + esc(e.ifc) + '</td></tr>'
+    ).join("") +
+    '</tbody></table></div>';
+  div.scrollIntoView({behavior: "smooth", block: "nearest"});
+}
+
+
+// ============================================================
+//  TAB 2: Bauteile
+// ============================================================
+function filterBauteile() {
+  const q = document.getElementById("bauteilSearch").value.toLowerCase();
+  const fach = document.getElementById("fachFilter").value;
+  const ifc = document.getElementById("ifcFilter").value;
+  const tbody = document.getElementById("bauteileBody");
+  tbody.innerHTML = "";
+
+  const filtered = elems.filter(e => {
+    if (q && !e.bauteilbezeichnung.toLowerCase().includes(q) && !(e.ifc43_entity || '').toLowerCase().includes(q)) return false;
+    if (fach && e.fachgebiet !== fach) return false;
+    if (ifc && e.ifc43_entity !== ifc) return false;
+    return true;
+  });
+
+  filtered.forEach(e => {
+    const pflichtCount = Object.values(e.pflicht).filter(v => v > 0).length;
+    const tr = document.createElement("tr");
+    tr.style.cursor = "pointer";
+    tr.onclick = () => showBauteilDetail(e);
+    tr.innerHTML =
+      '<td><strong>' + esc(e.bauteilbezeichnung) + '</strong></td>' +
+      '<td>' + esc(e.ifc43_entity) + '</td>' +
+      '<td style="color:var(--text-secondary)">' + esc(e.ifc43_predefined || '-') + '</td>' +
+      '<td style="font-size:11px">' + esc(e.ebkpt) + '</td>' +
+      '<td style="color:var(--text-secondary)">' + esc(e.fachgebiet) + '</td>' +
+      '<td>' + pflichtCount + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function showBauteilDetail(e) {
+  const div = document.getElementById("bauteilDetail");
+  div.classList.remove("hidden");
+
+  // Group by PSet
+  const byPset = {};
+  Object.entries(e.pflicht).forEach(([propName, level]) => {
+    const prop = propByName[propName];
+    if (!prop) return;
+    if (!byPset[prop.pset]) byPset[prop.pset] = [];
+    byPset[prop.pset].push({prop, level});
+  });
+
+  // IFC info (collapsible)
+  const ifcInfo =
+    '<div class="ifc-info-toggle" onclick="toggleNext(this)">' +
+      '<span class="chevron">&#9660;</span> IFC / Metadaten anzeigen' +
+    '</div>' +
+    '<div class="group-body" style="margin-top:6px">' +
+      '<div class="meta-grid">' +
+        '<div><dt>IFC 4.0 Entity</dt><dd>' + esc(e.ifc40_entity) + '</dd></div>' +
+        '<div><dt>IFC 4.0 PredefinedType</dt><dd>' + esc(e.ifc40_predefined || '-') + '</dd></div>' +
+        '<div><dt>IFC 4.3 Entity</dt><dd>' + esc(e.ifc43_entity) + '</dd></div>' +
+        '<div><dt>IFC 4.3 PredefinedType</dt><dd>' + esc(e.ifc43_predefined || '-') + '</dd></div>' +
+        '<div><dt>eBKP-T Element</dt><dd>' + esc(e.ebkpt) + '</dd></div>' +
+        '<div><dt>Fachgebiet</dt><dd>' + esc(e.fachgebiet) + '</dd></div>' +
+      '</div>' +
+    '</div>';
+
+  // PSet groups (collapsible)
+  let psetHtml = '';
+  Object.keys(byPset).sort().forEach(ps => {
+    const items = byPset[ps].sort((a, b) => b.level - a.level);
+    const required = items.filter(i => i.level > 0).length;
+    const gid = 'bg_' + ps.replace(/[^a-zA-Z0-9]/g, '_');
+
+    psetHtml +=
+      '<div class="group-header" onclick="toggleGroup(\'' + gid + '\', this)">' +
+        '<span class="chevron">&#9660;</span>' +
+        '<span class="group-title">' + esc(shortPset(ps)) + '</span>' +
+        '<span class="group-count">' + required + ' Pflicht / ' + items.length + ' total</span>' +
+      '</div>' +
+      '<div class="group-body" id="' + gid + '">' +
+        '<table><thead><tr><th>Property</th><th>Pflicht</th><th>Datentyp</th><th>Wertebereich</th></tr></thead><tbody>' +
+        items.map(i => {
+          const wb = i.prop.wertebereich;
+          let wbDisplay = wb || '-';
+          if (wb && wb.includes(",")) wbDisplay = wb.split(",").length + ' Werte';
+          return '<tr><td>' + esc(i.prop.name) + '</td><td>' + badge(i.level) + '</td><td>' + esc(i.prop.datentyp) + '</td><td class="wrap" style="color:var(--text-secondary)">' + esc(wbDisplay) + '</td></tr>';
+        }).join("") +
+        '</tbody></table>' +
+      '</div>';
+  });
+
+  div.innerHTML =
+    '<span class="close-btn" onclick="this.parentElement.classList.add(\'hidden\')">&times;</span>' +
+    '<h3>' + esc(e.bauteilbezeichnung) + '</h3>' +
+    '<div class="bauteil-meta">' +
+      '<span><span class="label">IFC:</span> <span class="value">' + esc(e.ifc43_entity) + '</span></span>' +
+      '<span><span class="label">Fachgebiet:</span> <span class="value">' + esc(e.fachgebiet) + '</span></span>' +
+      '<span><span class="label">eBKP-T:</span> <span class="value">' + esc(e.ebkpt) + '</span></span>' +
+    '</div>' +
+    ifcInfo +
+    '<div style="margin-top:10px">' + psetHtml + '</div>';
+
+  div.scrollIntoView({behavior: "smooth", block: "nearest"});
+}
+
+
+// ============================================================
+//  TAB 3: Matrix (grouped by PSet, collapsible, phase filter)
+// ============================================================
+let matrixDebounce = null;
+function debouncedFilterMatrix() {
+  clearTimeout(matrixDebounce);
+  matrixDebounce = setTimeout(filterMatrix, 250);
+}
+
+function filterMatrix() {
+  const q = document.getElementById("matrixBauteilSearch").value.toLowerCase();
+  const fachF = document.getElementById("matrixFachFilter").value;
+  const phase = parseInt(document.getElementById("matrixPhaseFilter").value);
+  const showAll = document.getElementById("matrixShowMode").value === "all";
+  const wrap = document.getElementById("matrixWrap");
+
+  if (q.length < 2 && !fachF) {
+    wrap.innerHTML = '<div style="padding:14px;color:var(--text-secondary);font-size:12px">Mind. 2 Zeichen eingeben oder Fachgebiet waehlen...</div>';
+    return;
+  }
+
+  // Filter elements
+  let filtElems = elems.filter(e => {
+    if (q && !e.bauteilbezeichnung.toLowerCase().includes(q)) return false;
+    if (fachF && e.fachgebiet !== fachF) return false;
+    return true;
+  });
+  const truncated = filtElems.length > 80;
+  if (truncated) filtElems = filtElems.slice(0, 80);
+
+  // Group properties by PSet
+  const psetGroups = {};
+  props.forEach(p => {
+    if (!psetGroups[p.pset]) psetGroups[p.pset] = [];
+    psetGroups[p.pset].push(p);
+  });
+
+  // Filter: only PSets that have at least one relevant property for filtered elements
+  const relevantPsets = {};
+  Object.entries(psetGroups).forEach(([ps, pList]) => {
+    let filteredProps = pList;
+    if (!showAll) {
+      filteredProps = pList.filter(p =>
+        filtElems.some(e => {
+          const v = e.pflicht[p.name] || 0;
+          if (phase > 0) return v === phase;
+          return v > 0;
+        })
+      );
+    }
+    if (filteredProps.length > 0) relevantPsets[ps] = filteredProps;
+  });
+
+  if (Object.keys(relevantPsets).length === 0 || filtElems.length === 0) {
+    wrap.innerHTML = '<div style="padding:14px;color:var(--text-secondary)">Keine Ergebnisse</div>';
+    return;
+  }
+
+  // Build matrix HTML with PSet group separators
+  let html = '<table class="matrix-table"><thead><tr>';
+  html += '<th class="sticky-col">Bauteil</th>';
+
+  // Column headers grouped by PSet
+  const orderedPsets = Object.keys(relevantPsets).sort();
+  const allCols = []; // {pset, prop}
+  orderedPsets.forEach(ps => {
+    relevantPsets[ps].forEach(p => allCols.push({pset: ps, prop: p}));
+  });
+
+  allCols.forEach(c => {
+    html += '<th class="col-header" title="' + esc(c.pset) + ' / ' + esc(c.prop.name) + '">' + esc(c.prop.name) + '</th>';
+  });
+  html += '</tr></thead><tbody>';
+
+  // PSet group separator row + data rows
+  // Build a flat list: group-header-row then data-cells per PSet
+  // Actually for a matrix we need all columns in every row. Let me build pset group separators as rows that span columns.
+
+  // Better approach: render all data rows, but add PSet separator rows above the column headers
+  // Actually, the most practical approach: collapsible PSet groups as column groups
+
+  // Simplest effective approach: One header row with PSet group sub-headers
+  // Let me build a second header row showing PSet groups
+  let html2 = '<table class="matrix-table"><thead>';
+
+  // Row 1: PSet group headers
+  html2 += '<tr><th class="sticky-col" rowspan="2" style="vertical-align:bottom">Bauteil';
+  if (truncated) html2 += '<br><span style="color:var(--warning);font-weight:normal;font-size:10px">(max 80 angezeigt)</span>';
+  html2 += '</th>';
+
+  orderedPsets.forEach(ps => {
+    const cnt = relevantPsets[ps].length;
+    html2 += '<th colspan="' + cnt + '" style="text-align:center;color:var(--accent);font-size:10px;padding:4px;border-left:2px solid var(--border);cursor:pointer;white-space:normal" ' +
+      'onclick="toggleMatrixPset(this, ' + cnt + ')" title="Klick zum Ein-/Ausklappen">' +
+      '<span class="chevron" style="font-size:8px">&#9660;</span> ' + esc(shortPset(ps)) + '</th>';
+  });
+  html2 += '</tr>';
+
+  // Row 2: Property names
+  html2 += '<tr>';
+  orderedPsets.forEach((ps, psIdx) => {
+    relevantPsets[ps].forEach((p, i) => {
+      const borderLeft = i === 0 ? 'border-left:2px solid var(--border);' : '';
+      html2 += '<th class="col-header" data-pset="' + esc(ps) + '" style="' + borderLeft + '" title="' + esc(p.name) + '">' + esc(p.name) + '</th>';
+    });
+  });
+  html2 += '</tr></thead><tbody>';
+
+  // Data rows
+  filtElems.forEach(e => {
+    html2 += '<tr>';
+    html2 += '<td class="sticky-col" title="' + esc(e.bauteilbezeichnung) + '">' + esc(e.bauteilbezeichnung) + '</td>';
+
+    orderedPsets.forEach((ps, psIdx) => {
+      relevantPsets[ps].forEach((p, i) => {
+        const v = e.pflicht[p.name] || 0;
+        const borderLeft = i === 0 ? 'border-left:2px solid var(--border);' : '';
+        let cellContent;
+
+        if (phase > 0) {
+          // Phase filter active: show only matching phase, highlight required
+          if (v === phase) {
+            cellContent = badge(v);
+          } else if (v > 0 && v < phase) {
+            // Already required in earlier phase
+            cellContent = '<span style="color:var(--text-secondary);font-size:10px">' + v + '</span>';
+          } else {
+            cellContent = '<span style="color:#333">-</span>';
+          }
+        } else {
+          cellContent = v > 0 ? badge(v) : '<span style="color:#333">-</span>';
+        }
+
+        html2 += '<td class="cell" data-pset="' + esc(ps) + '" style="' + borderLeft + '">' + cellContent + '</td>';
+      });
+    });
+    html2 += '</tr>';
+  });
+
+  html2 += '</tbody></table>';
+  wrap.innerHTML = html2;
+}
+
+// Toggle PSet columns in matrix
+function toggleMatrixPset(headerTh, colCount) {
+  const chevron = headerTh.querySelector('.chevron');
+  const psetName = headerTh.textContent.trim().substring(2); // skip chevron
+  const table = headerTh.closest('table');
+  const isCollapsed = headerTh.dataset.collapsed === '1';
+
+  // Find column indices to toggle
+  // Get all th in header row 2
+  const headerRow2 = table.querySelector('thead tr:nth-child(2)');
+  const allTh2 = headerRow2.querySelectorAll('th');
+
+  // Find the starting index by matching pset from the group header row
+  const headerRow1 = table.querySelector('thead tr:nth-child(1)');
+  const groupHeaders = headerRow1.querySelectorAll('th:not(.sticky-col)');
+  let startIdx = 0;
+  let found = false;
+  for (const gh of groupHeaders) {
+    if (gh === headerTh) { found = true; break; }
+    startIdx += parseInt(gh.getAttribute('colspan') || 1);
+  }
+  if (!found) return;
+
+  if (isCollapsed) {
+    // Expand
+    headerTh.dataset.collapsed = '0';
+    headerTh.setAttribute('colspan', colCount);
+    chevron.innerHTML = '&#9660;';
+    for (let i = startIdx; i < startIdx + colCount; i++) {
+      allTh2[i].style.display = '';
+    }
+    table.querySelectorAll('tbody tr').forEach(tr => {
+      const cells = tr.querySelectorAll('td:not(.sticky-col)');
+      for (let i = startIdx; i < startIdx + colCount; i++) {
+        if (cells[i]) cells[i].style.display = '';
+      }
+    });
+  } else {
+    // Collapse
+    headerTh.dataset.collapsed = '1';
+    headerTh.setAttribute('colspan', 1);
+    chevron.innerHTML = '&#9654;';
+    for (let i = startIdx; i < startIdx + colCount; i++) {
+      if (i === startIdx) {
+        allTh2[i].style.display = '';
+        allTh2[i].innerHTML = '<span style="color:var(--text-secondary)">...</span>';
+      } else {
+        allTh2[i].style.display = 'none';
+      }
+    }
+    table.querySelectorAll('tbody tr').forEach(tr => {
+      const cells = tr.querySelectorAll('td:not(.sticky-col)');
+      for (let i = startIdx; i < startIdx + colCount; i++) {
+        if (i === startIdx) {
+          if (cells[i]) { cells[i].style.display = ''; cells[i].innerHTML = ''; }
+        } else {
+          if (cells[i]) cells[i].style.display = 'none';
+        }
+      }
+    });
+  }
+}
+
+
+// ============================================================
+//  Shared helpers
+// ============================================================
+function toggleGroup(id, headerEl) {
+  const body = document.getElementById(id);
+  const chevron = headerEl.querySelector('.chevron');
+  if (body.classList.contains('collapsed')) {
+    body.classList.remove('collapsed');
+    chevron.classList.remove('collapsed');
+  } else {
+    body.classList.add('collapsed');
+    chevron.classList.add('collapsed');
+  }
+}
+
+function toggleNext(el) {
+  const next = el.nextElementSibling;
+  const chevron = el.querySelector('.chevron');
+  if (next.style.display === 'none') {
+    next.style.display = '';
+    chevron.innerHTML = '&#9660;';
+  } else {
+    next.style.display = 'none';
+    chevron.innerHTML = '&#9654;';
+  }
+}
+
+// Init
+filterProps();
+filterBauteile();
+</script>
+</body>
+</html>

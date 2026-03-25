@@ -473,6 +473,51 @@ td.wrap { white-space: normal; max-width: 300px; }
 .matrix-detail-panel .mdp-body .val-chip { font-size: 11px; }
 .matrix-detail-panel .mdp-body .val-chip.val-hidden { display: none; }
 .matrix-detail-panel .mdp-body .val-match { background: var(--accent-light); border-color: var(--accent); }
+
+/* ===== Upload Screen ===== */
+.upload-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 50px);
+  padding: 24px;
+}
+.upload-box {
+  background: var(--bg-secondary);
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 48px 56px;
+  text-align: center;
+  max-width: 520px;
+  width: 100%;
+  transition: border-color 0.2s, background 0.2s;
+}
+.upload-box.drag-over {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+.upload-box h2 { font-size: 18px; margin: 16px 0 6px; color: #fff; }
+.upload-box p { color: var(--text-secondary); font-size: 13px; margin-bottom: 20px; }
+.upload-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 10px 28px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.upload-btn:hover { background: var(--accent-hover); }
+.upload-link { margin-top: 16px; }
+.upload-link a { color: var(--text-secondary); font-size: 11px; text-decoration: underline; }
+.upload-link a:hover { color: var(--accent); }
+.upload-status { margin-top: 12px; font-size: 12px; color: var(--text-secondary); }
+.upload-status.error { color: var(--error); }
+
+/* Hide viewer sections until data loaded */
+.tabs.hidden, .tab-content.hidden { display: none !important; }
 </style>
 </head>
 <body>
@@ -489,20 +534,38 @@ td.wrap { white-space: normal; max-width: 300px; }
     </div>
     <div class="app-name">Datenkatalog Viewer</div>
   </div>
-  <div class="toolbar-info">
-    Projekt BUGAW | Elementplan | 16.03.2026 | 209 Properties | 442 Bauteile
+  <div class="toolbar-info" id="toolbarInfo"></div>
+  <button id="reloadBtn" class="hidden" onclick="clearAndReload()" style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-secondary);padding:4px 12px;border-radius:var(--radius-md);cursor:pointer;font-size:11px;font-family:inherit;">Andere Datei laden</button>
+</div>
+
+<!-- ===== Upload Screen ===== -->
+<div id="uploadScreen" class="upload-screen">
+  <div class="upload-box" id="dropZone">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#CB0231" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+    </svg>
+    <h2>Datenkatalog laden</h2>
+    <p>Excel-Datei (.xlsx) hierher ziehen oder klicken zum Auswaehlen</p>
+    <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none">
+    <button class="upload-btn" onclick="document.getElementById('fileInput').click()">Datei auswaehlen</button>
+    <div class="upload-link">
+      <a href="https://app.buildagil.com/teams/184509/Freigegebene%20Dokumente/30.3_DP/Projektierung/01_BIM/13_Datenkatalog/Datenkatalog_ASTRA.xlsx?ItemID=893&ItemVersion=9.0" target="_blank" rel="noopener">
+        Datenkatalog auf buildagil oeffnen
+      </a>
+    </div>
+    <div id="uploadStatus" class="upload-status"></div>
   </div>
 </div>
 
 <!-- ===== Tabs ===== -->
-<div class="tabs">
+<div class="tabs hidden" id="mainTabs">
   <div class="tab active" data-tab="props">Properties</div>
   <div class="tab" data-tab="bauteile">Bauteile</div>
   <div class="tab" data-tab="matrix">Matrix</div>
 </div>
 
 <!-- ===== TAB 1: Property View ===== -->
-<div class="container tab-content" id="tab-props">
+<div class="container tab-content hidden" id="tab-props">
   <div class="legend">
     Pflicht:
     <span class="badge badge-0">0 Optional</span>
@@ -621,22 +684,226 @@ td.wrap { white-space: normal; max-width: 300px; }
   </div>
 </div>
 
-<!-- ===== Data (loaded externally for dev, embedded for production) ===== -->
-<script src="data.js"></script>
+<!-- SheetJS for client-side Excel parsing -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script>
 "use strict";
 
-const props = DATA.properties;
-const elems = DATA.elements;
+// ============================================================
+//  Global state
+// ============================================================
+let props = [];
+let elems = [];
+let propByName = {};
 
-// Build lookup
-const propByName = {};
-props.forEach(p => { propByName[p.name] = p; });
+// ============================================================
+//  Excel Parser
+// ============================================================
+function parseExcel(arrayBuffer) {
+  const wb = XLSX.read(arrayBuffer, {type: 'array'});
+  const ws = wb.Sheets['Datenkatalog'];
+  if (!ws) throw new Error('Sheet "Datenkatalog" nicht gefunden');
 
-// Unique values for filters
-const psets = [...new Set(props.map(p => p.pset))].sort();
-const fachs = [...new Set(elems.map(e => e.fachgebiet).filter(Boolean))].sort();
-const ifcs  = [...new Set(elems.map(e => e.ifc43_entity).filter(Boolean))].sort();
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  const maxRow = range.e.r + 1;
+  const maxCol = range.e.c + 1;
+
+  function cell(r, c) {
+    const addr = XLSX.utils.encode_cell({r: r, c: c});
+    const cell = ws[addr];
+    return cell ? (cell.v != null ? cell.v : '') : '';
+  }
+
+  // Row 0 = PSet headers (merged), Row 7 = property names
+  // Handle merged cells for row 0 (PSet names)
+  const merges = ws['!merges'] || [];
+  // Build a map: col -> PSet name from row 0 merges
+  const psetMap = {};
+  // First fill direct values
+  for (let c = 8; c < maxCol; c++) {
+    const v = cell(0, c);
+    if (v) psetMap[c] = String(v);
+  }
+  // Then fill from merges
+  merges.forEach(m => {
+    if (m.s.r === 0) {
+      const v = cell(m.s.r, m.s.c);
+      if (v) {
+        for (let c = m.s.c; c <= m.e.c; c++) {
+          psetMap[c] = String(v);
+        }
+      }
+    }
+  });
+
+  // Build property definitions (cols 8+, 0-indexed)
+  const properties = [];
+  for (let c = 8; c < maxCol; c++) {
+    const name = cell(7, c); // Row 8 (0-indexed: 7)
+    if (!name) continue;
+    properties.push({
+      col: c,
+      pset: psetMap[c] || '',
+      name: String(name).trim(),
+      wertebereich: String(cell(1, c) || '').trim(),
+      standardwert: String(cell(2, c) || '').trim(),
+      beschreibung: String(cell(3, c) || '').trim(),
+      allplan_id: String(cell(4, c) || '').trim(),
+      datentyp: String(cell(5, c) || '').trim(),
+    });
+  }
+
+  // Build element rows (starting at row 8, 0-indexed)
+  const elements = [];
+  for (let r = 8; r < maxRow; r++) {
+    const bauteil = cell(r, 4);
+    if (!bauteil) continue;
+
+    const elem = {
+      ifc40_entity: String(cell(r, 0) || ''),
+      ifc40_predefined: String(cell(r, 1) || ''),
+      ifc43_entity: String(cell(r, 2) || ''),
+      ifc43_predefined: String(cell(r, 3) || ''),
+      bauteilbezeichnung: String(bauteil),
+      ebkpt: String(cell(r, 5) || ''),
+      fachgebiet: String(cell(r, 6) || ''),
+      pflicht: {}
+    };
+
+    properties.forEach(p => {
+      const val = cell(r, p.col);
+      if (val !== '' && val != null) {
+        const num = Number(val);
+        elem.pflicht[p.name] = isNaN(num) ? String(val) : num;
+      }
+    });
+
+    elements.push(elem);
+  }
+
+  return { properties, elements };
+}
+
+// ============================================================
+//  Upload / Cache Logic
+// ============================================================
+const CACHE_KEY = 'datenkatalog_data';
+const CACHE_TS_KEY = 'datenkatalog_ts';
+
+function loadFromCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    const ts = localStorage.getItem(CACHE_TS_KEY);
+    if (raw) {
+      const data = JSON.parse(raw);
+      if (data.properties && data.elements) {
+        initViewer(data);
+        const date = ts ? new Date(parseInt(ts)).toLocaleDateString('de-CH') : '?';
+        document.getElementById('uploadStatus').textContent = '';
+        return true;
+      }
+    }
+  } catch(e) { console.warn('Cache load failed:', e); }
+  return false;
+}
+
+function saveToCache(data) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+    localStorage.setItem(CACHE_TS_KEY, String(Date.now()));
+  } catch(e) { console.warn('Cache save failed (data too large?):', e); }
+}
+
+function clearAndReload() {
+  localStorage.removeItem(CACHE_KEY);
+  localStorage.removeItem(CACHE_TS_KEY);
+  location.reload();
+}
+
+function handleFile(file) {
+  if (!file) return;
+  const status = document.getElementById('uploadStatus');
+  status.className = 'upload-status';
+  status.textContent = 'Wird geladen und geparsed...';
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = parseExcel(e.target.result);
+      saveToCache(data);
+      initViewer(data);
+      status.textContent = '';
+    } catch(err) {
+      status.className = 'upload-status error';
+      status.textContent = 'Fehler: ' + err.message;
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// Drag & Drop
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('drag-over'); });
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+document.getElementById('fileInput').addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+// ============================================================
+//  Initialize Viewer with parsed data
+// ============================================================
+function initViewer(data) {
+  props = data.properties;
+  elems = data.elements;
+
+  // Build lookup
+  propByName = {};
+  props.forEach(p => { propByName[p.name] = p; });
+
+  // Update toolbar info
+  document.getElementById('toolbarInfo').textContent =
+    props.length + ' Properties | ' + elems.length + ' Bauteile | Geladen: ' + new Date().toLocaleDateString('de-CH');
+
+  // Show viewer, hide upload
+  document.getElementById('uploadScreen').classList.add('hidden');
+  document.getElementById('mainTabs').classList.remove('hidden');
+  document.getElementById('tab-props').classList.remove('hidden');
+  document.getElementById('reloadBtn').classList.remove('hidden');
+
+  // Populate filters
+  const psets = [...new Set(props.map(p => p.pset))].sort();
+  const fachs = [...new Set(elems.map(e => e.fachgebiet).filter(Boolean))].sort();
+  const ifcs  = [...new Set(elems.map(e => e.ifc43_entity).filter(Boolean))].sort();
+
+  // Clear existing options first (in case of re-init)
+  ['psetFilter','fachFilter','matrixFachFilter','ifcFilter'].forEach(id => {
+    const sel = document.getElementById(id);
+    while (sel.options.length > 1) sel.remove(1);
+  });
+
+  fillSelect("psetFilter", psets);
+  fillSelect("fachFilter", fachs);
+  fillSelect("matrixFachFilter", fachs);
+  fillSelect("ifcFilter", ifcs);
+
+  // Pre-compute counts
+  propCounts = {};
+  props.forEach(p => {
+    propCounts[p.name] = elems.filter(e => (e.pflicht[p.name] || 0) > 0).length;
+  });
+
+  filterProps();
+  filterBauteile();
+}
+
+let propCounts = {};
 
 function fillSelect(id, items) {
   const sel = document.getElementById(id);
@@ -646,10 +913,6 @@ function fillSelect(id, items) {
     sel.appendChild(o);
   });
 }
-fillSelect("psetFilter", psets);
-fillSelect("fachFilter", fachs);
-fillSelect("matrixFachFilter", fachs);
-fillSelect("ifcFilter", ifcs);
 
 // Tab switching
 document.querySelectorAll(".tab").forEach(t => {
@@ -677,13 +940,6 @@ function badge(level) {
 function shortPset(ps) {
   return ps.replace("CH_02_Spezifikation_", "").replace("CH_01_", "").replace("CH_03_", "").replace("CH_04_", "").replace("CH_05_", "");
 }
-
-// Pre-compute property assignment counts
-const propCounts = {};
-props.forEach(p => {
-  propCounts[p.name] = elems.filter(e => (e.pflicht[p.name] || 0) > 0).length;
-});
-
 
 // ============================================================
 //  TAB 1: Properties
@@ -1185,9 +1441,8 @@ function toggleNext(el) {
   }
 }
 
-// Init
-filterProps();
-filterBauteile();
+// Try loading from cache on startup
+loadFromCache();
 </script>
 </body>
 </html>
